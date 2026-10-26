@@ -1,0 +1,37 @@
+[configuration]
+
+entry_symbol = "initialize_pythonscript"
+compatibility_minimum="4.6.0"
+version = "4.6-alpha-17"
+[libraries]
+
+windows.debug.x86_64 = "cpython-3.14.3-windows64/python/pythonscript.dll"
+windows.release.x86_64 = "cpython-3.14.3-windows64/python/pythonscript.dll"
+windows.debug.x86 = "cpython-3.14.3-windows32/python/pythonscript.dll"
+windows.release.x86 = "cpython-3.14.3-windows32/python/pythonscript.dll"
+
+
+linux.debug.x86_64 = "cpython-3.14.3-linux64/python/bin/pythonscript.so"
+linux.release.x86_64 = "cpython-3.14.3-linux64/python/bin/pythonscript.so"
+linux.debug.arm64 = "cpython-3.14.3-linuxarm64/python/bin/pythonscript.so"
+linux.release.arm64 = "cpython-3.14.3-linuxarm64/python/bin/pythonscript.so"
+linux.debug.x86 = "cpython-3.14.3-linux32/python/bin/pythonscript.so"
+linux.release.x86 = "cpython-3.14.3-linux32/python/bin/pythonscript.so"
+
+macos.debug.arm64 = "cpython-3.14.3-darwin64/python/bin/pythonscript.dylib"
+macos.release.arm64 = "cpython-3.14.3-darwin64/python/bin/pythonscript.dylib"
+
+android.debug.arm64 = "cpython-3.14.3-androidarm64/python/bin/libpythonscript.so"
+android.release.arm64 = "cpython-3.14.3-androidarm64/python/bin/"
+
+[dependencies]
+android.debug.arm64 = {
+    "res://addons/py4godot/cpython-3.14.3-androidarm64/python/bin/libmain.so" : "lib/arm64-v8a",
+    "res://addons/py4godot/cpython-3.14.3-androidarm64/python/lib/libpython3.14.so" : "lib/arm64-v8a",
+    "res://addons/py4godot/cpython-3.14.3-androidarm64/python/lib/libpython3.so" : "lib/arm64-v8a",
+}
+android.release.arm64 = {
+    "res://addons/py4godot/cpython-3.14.3-androidarm64/python/bin/libmain.so" : "lib/arm64-v8a",
+    "res://addons/py4godot/cpython-3.14.3-androidarm64/python/lib/libpython3.14.so" : "lib/arm64-v8a",
+    "res://addons/py4godot/cpython-3.14.3-androidarm64/python/lib/libpython3.so" : "lib/arm64-v8a",
+}

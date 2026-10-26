@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://oyshle6js32d"]
+
+[ext_resource type="Script" uid="uid://hex11p1notvc" path="res://carro.gd" id="1_dvi8e"]
+
+[sub_resource type="QuadMesh" id="QuadMesh_0vdwr"]
+size = Vector2(40, 20)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_0vdwr"]
+size = Vector2(40, 20)
+
+[node name="Carro" type="CharacterBody2D" unique_id=2045650703]
+script = ExtResource("1_dvi8e")
+
+[node name="MeshInstance2D" type="MeshInstance2D" parent="." unique_id=1277683037]
+mesh = SubResource("QuadMesh_0vdwr")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=2045847838]
+shape = SubResource("RectangleShape2D_0vdwr")
