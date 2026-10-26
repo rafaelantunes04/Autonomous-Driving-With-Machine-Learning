@@ -1,7 +1,0 @@
-CharacterBody2D
-Area2D
-CollisionShape2D
-MeshInstance2D
-Camera2D
-StaticBody2D
-Path2D
