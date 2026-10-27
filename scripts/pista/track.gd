@@ -6,6 +6,7 @@ class_name Track
 
 @export var track_width := 120.0
 @export var num_points := 12
+## Raios para 12 pontos (referência). Escalam sozinhos com num_points.
 @export var min_radius := 300.0
 @export var max_radius := 600.0
 @export var car_scene: PackedScene  # arrasta aqui a cena do carro no Inspetor
@@ -101,7 +102,7 @@ func _garantir_carro() -> void:
 	_stats.configurar(car)
 	_hud.configurar(car, _stats)
 	_camera.alvo = car
-	_adicionar_controlador_python()   #descomentar para o script python
+	#_adicionar_controlador_python()   #descomentar para o script python
 
 
 func _adicionar_controlador_python() -> void:
@@ -137,9 +138,19 @@ func _fit_camera() -> void:
 func _draw() -> void:
 	if centerline.is_empty():
 		return
-	draw_polyline(_closed(centerline), Color(0.25, 0.25, 0.25), track_width)
-	draw_polyline(_closed(left_border), Color.WHITE, 3.0)
-	draw_polyline(_closed(right_border), Color.WHITE, 3.0)
+	# Asfalto: dois triângulos por segmento, entre as duas bordas. draw_primitive não
+	# triangula, por isso não falha com quadriláteros torcidos nas curvas apertadas
+	# (draw_colored_polygon dava "triangulation failed"), e não deixa buracos.
+	var n := centerline.size()
+	var cor := Color(0.25, 0.25, 0.25)
+	var cores := PackedColorArray([cor, cor, cor])
+	var sem_uv := PackedVector2Array()
+	for i in n:
+		var j := (i + 1) % n
+		draw_primitive(PackedVector2Array([left_border[i], left_border[j], right_border[j]]), cores, sem_uv)
+		draw_primitive(PackedVector2Array([left_border[i], right_border[j], right_border[i]]), cores, sem_uv)
+	draw_polyline(_closed(left_border), Color.WHITE, 3.0, true)
+	draw_polyline(_closed(right_border), Color.WHITE, 3.0, true)
 
 	# Linha de partida
 	var t := Vector2.from_angle(start_rotation)
