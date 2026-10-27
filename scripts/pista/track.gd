@@ -101,7 +101,7 @@ func _garantir_carro() -> void:
 	_stats.configurar(car)
 	_hud.configurar(car, _stats)
 	_camera.alvo = car
-	#_adicionar_controlador_python()   #descomentar para o script python
+	_adicionar_controlador_python()   #descomentar para o script python
 
 
 func _adicionar_controlador_python() -> void:
