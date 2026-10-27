@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Condução Autónoma com Machine Learning"
-run/main_scene="uid://c17ds3oqf06ur"
+run/main_scene="res://cenas/track.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 

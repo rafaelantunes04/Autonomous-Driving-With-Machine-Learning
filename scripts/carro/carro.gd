@@ -1,8 +1,15 @@
 extends CharacterBody2D
+class_name Carro
 
 # CONVENÇÃO: a frente do carro é +X (transform.x). A imagem do sprite deve
 # apontar para a direita; se apontar para cima, roda o Sprite2D filho 90°
 # (e não o corpo), assim a física fica sempre consistente.
+#
+# Este script trata SÓ da física do carro. Câmara, HUD, contagem de batidas
+# e tempo vivem noutros scripts (ver camara_pista.gd, hud.gd, estatisticas_corrida.gd).
+
+## Emitido no primeiro frame de contacto com qualquer corpo.
+signal colidiu(colisor: Node, velocidade_kmh: float)
 
 # --- Motor ---
 @export var potencia_motor: float = 560.0      # força máxima a baixa velocidade
@@ -37,20 +44,11 @@ extends CharacterBody2D
 # que é mostrado como 120 km/h  ->  1 km/h = 3 px/s.
 @export_group("Velocímetro")
 @export var pixels_por_kmh: float = 3.0
-@export var mostrar_hud: bool = true   # desliga nos carros que não são o principal
-
-# --- Câmara (tecla C alterna) ---
-# Por defeito mantém a vista do mapa que já tens na cena.
-# Ao carregar em C passa a seguir o carro; carregar outra vez volta à vista original.
-@export_group("Câmara")
-@export var zoom_seguir: Vector2 = Vector2(1.4, 1.4)
-@export var atraso_posicao: float = 5.0   # menor = mais atraso
-@export var atraso_rotacao: float = 2.5   # menor = roda mais devagar atrás do carro
-@export var atraso_zoom: float = 4.0
 
 # --- Controlo ---
-# Para RL: põe controlo_manual = false e escreve input_acel / input_dir
-# (ambos em [-1, 1]) a partir do agente.
+# controlo_manual = true  -> o carro lê as setas (ui_up/down/left/right).
+# controlo_manual = false -> alguém de fora (ex.: controlador_carro.py)
+#                            escreve input_acel / input_dir, ambos em [-1, 1].
 @export_group("Controlo")
 @export var controlo_manual: bool = true
 var input_acel: float = 0.0   # +1 acelera, -1 trava/marcha-atrás
@@ -60,51 +58,10 @@ var em_colisao: bool = false
 var acelerador: float = 0.0   # acelerador suavizado
 var direcao_rodas: float = 0.0
 
-var hud: Label
-var camara: Camera2D
-var camara_seguir: bool = false
-var padrao_posicao: Vector2
-var padrao_rotacao: float = 0.0
-var padrao_zoom: Vector2 = Vector2.ONE
-
-
-func _ready() -> void:
-	if mostrar_hud:
-		criar_hud()
-	# Espera que a cena toda esteja pronta para encontrar a câmara atual
-	call_deferred("_iniciar_camara")
-
-
-func _iniciar_camara() -> void:
-	# 1) Camera2D filha do carro; 2) câmara atual da cena; 3) cria uma nova
-	for filho in get_children():
-		if filho is Camera2D:
-			camara = filho
-			break
-	if camara == null:
-		camara = get_viewport().get_camera_2d()
-	if camara == null:
-		camara = Camera2D.new()
-		add_child(camara)
-		camara.global_position = global_position
-		camara.make_current()
-
-	# Se for filha do carro, tem de ser independente para poder ter atraso
-	if camara.get_parent() == self:
-		camara.top_level = true
-
-	# Guarda as definições padrão (a vista do mapa)
-	padrao_posicao = camara.global_position
-	padrao_zoom = camara.zoom
-	padrao_rotacao = 0.0 if camara.ignore_rotation else camara.rotation
-
-	camara.ignore_rotation = false   # necessário para a câmara poder rodar
-	camara.rotation = padrao_rotacao
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_C:
-		camara_seguir = not camara_seguir
+# Estado em tipos simples, para controladores externos (Python) lerem com get().
+var estado_velocidade_kmh: float = 0.0   # na direção da frente; negativo = marcha-atrás
+var estado_angulo_rodas: float = 0.0     # graus; positivo = direita
+var estado_rumo: float = 0.0             # graus, 0 a 360 (0 = +X)
 
 
 func _physics_process(delta: float) -> void:
@@ -119,72 +76,57 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	detetar_colisoes(vel_antes, delta)
-	atualizar_camara(delta)
-	atualizar_hud()
+	_atualizar_estado()
+
+
+# ------------------------------------------------------------------ API pública
+
+func _atualizar_estado() -> void:
+	estado_velocidade_kmh = velocity.dot(transform.x) / pixels_por_kmh
+	estado_angulo_rodas = rad_to_deg(direcao_rodas)
+	estado_rumo = fposmod(rotation_degrees, 360.0)
 
 
 func velocidade_kmh() -> float:
 	return velocity.length() / pixels_por_kmh
 
 
-func criar_hud() -> void:
-	# CanvasLayer fica fixo no ecrã, independente da câmara
-	var camada := CanvasLayer.new()
-	add_child(camada)
-	hud = Label.new()
-	hud.position = Vector2(20, 20)
-	hud.add_theme_font_size_override("font_size", 24)
-	hud.add_theme_color_override("font_outline_color", Color.BLACK)
-	hud.add_theme_constant_override("outline_size", 6)
-	camada.add_child(hud)
+## Atalho para controladores externos (Python, RL, ...). Valores em [-1, 1].
+func aplicar_comandos(acel: float, direcao: float) -> void:
+	input_acel = clampf(acel, -1.0, 1.0)
+	input_dir = clampf(direcao, -1.0, 1.0)
 
 
-func atualizar_hud() -> void:
-	if hud == null:
-		return
-	var rodas := rad_to_deg(direcao_rodas)
-	var lado := "reta"
-	if rodas > 1.0:
-		lado = "direita"
-	elif rodas < -1.0:
-		lado = "esquerda"
-	var rumo := fposmod(rotation_degrees, 360.0)
-	hud.text = "Velocidade: %d km/h\nDireção das rodas: %.0f° (%s)\nRumo do carro: %.0f°" % [
-			int(velocidade_kmh()), absf(rodas), lado, rumo]
+## Coloca o carro parado numa posição/rotação global, sem herdar estado anterior.
+func reiniciar(nova_posicao: Vector2, nova_rotacao: float) -> void:
+	global_position = nova_posicao
+	global_rotation = nova_rotacao
+	velocity = Vector2.ZERO
+	acelerador = 0.0
+	direcao_rodas = 0.0
+	input_acel = 0.0
+	input_dir = 0.0
+	em_colisao = false
 
+
+# ------------------------------------------------------------------ Colisões
 
 func detetar_colisoes(vel_antes: Vector2, delta: float) -> void:
 	var n := get_slide_collision_count()
 	if n > 0:
 		var colisao := get_slide_collision(0)
-		# Só no primeiro frame de contacto: print + perda de velocidade do impacto
+		# Só no primeiro frame de contacto: sinal + perda de velocidade do impacto
 		if not em_colisao:
-			var outro := colisao.get_collider()
-			var nome: String = outro.name if outro else "desconhecido"
-			print("Colisão com: ", nome, " | velocidade: ", int(vel_antes.length() / pixels_por_kmh), " km/h")
 			# Quanto mais de frente bate na parede, mais velocidade perde
 			var frontal := clampf(-vel_antes.normalized().dot(colisao.get_normal()), 0.0, 1.0)
 			velocity *= 1.0 - perda_impacto * frontal
+			colidiu.emit(colisao.get_collider(), vel_antes.length() / pixels_por_kmh)
 		# Enquanto estiver encostado, vai travando continuamente
 		velocity *= exp(-atrito_parede * delta)
 	em_colisao = n > 0
 
 
-func atualizar_camara(delta: float) -> void:
-	if camara == null:
-		return
-
-	var alvo_pos := global_position if camara_seguir else padrao_posicao
-	var alvo_zoom := zoom_seguir if camara_seguir else padrao_zoom
-	# +90° para o carro aparecer a apontar para cima no ecrã
-	var alvo_rot := (rotation + PI / 2.0) if camara_seguir else padrao_rotacao
-
-	camara.global_position = camara.global_position.lerp(
-			alvo_pos, 1.0 - exp(-atraso_posicao * delta))
-	camara.rotation = lerp_angle(
-			camara.rotation, alvo_rot, 1.0 - exp(-atraso_rotacao * delta))
-	camara.zoom = camara.zoom.lerp(alvo_zoom, 1.0 - exp(-atraso_zoom * delta))
-
+# ------------------------------------------------------------------ Física
 
 func ler_input() -> void:
 	input_acel = Input.get_axis("ui_down", "ui_up")
