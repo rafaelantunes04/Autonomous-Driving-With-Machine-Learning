@@ -3,9 +3,10 @@
     carro = CarroAPI(no_do_carro)
 
     # Comandos (chama a cada tick)
-    carro.acelerar(1.0)            # -1 (trava/marcha-atrás) a +1 (acelera)
+    carro.acelerar(0.8)            # pedal para a frente: força de 0 a 1
+    carro.recuar(0.5)              # pedal para trás (trava / marcha-atrás): força de 0 a 1
     carro.virar(-0.3)              # -1 (esquerda) a +1 (direita)
-    carro.manter_velocidade(60)    # acelera/trava sozinho para ficar nos 60 km/h
+    carro.largar_pedal()           # força 0
 
     # Leitura
     carro.velocidade               # km/h (negativo em marcha-atrás)
@@ -24,28 +25,34 @@ def _limitar(valor, minimo=-1.0, maximo=1.0):
 
 class CarroAPI:
 
-    def __init__(self, no_carro, ganho_velocidade=0.05):
+    def __init__(self, no_carro):
         self._no = no_carro
-        self.ganho_velocidade = ganho_velocidade
         self._erros_mostrados = set()
         # A partir daqui o carro deixa de ler as setas: mandas tu.
         self._escrever("controlo_manual", False)
 
     # ------------------------------------------------------------ comandos
 
-    def acelerar(self, valor):
-        self._escrever("input_acel", _limitar(valor))
+    def acelerar(self, forca):
+        """Pedal para a frente. forca: 0 (solto) a 1 (a fundo)."""
+        self._escrever("input_acel", _limitar(forca, 0.0, 1.0))
+
+    def recuar(self, forca):
+        """Pedal para trás. forca: 0 (solto) a 1 (a fundo).
+
+        Se o carro ainda vai para a frente, trava; quando está (quase) parado,
+        engata a marcha-atrás.
+        """
+        self._escrever("input_acel", -_limitar(forca, 0.0, 1.0))
+
+    def largar_pedal(self):
+        self._escrever("input_acel", 0.0)
 
     def virar(self, valor):
         self._escrever("input_dir", _limitar(valor))
 
-    def manter_velocidade(self, alvo_kmh):
-        """Controlador proporcional simples. Chama a cada tick."""
-        erro = alvo_kmh - self.velocidade
-        self.acelerar(erro * self.ganho_velocidade)
-
     def parar(self):
-        self.acelerar(0.0)
+        self.largar_pedal()
         self.virar(0.0)
 
     # ------------------------------------------------------------ leitura

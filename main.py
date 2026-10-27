@@ -17,11 +17,11 @@ class main(Node):
         self.tempo += delta
 
         if self.tempo < 1.0:
-            self.carro.manter_velocidade(50)     # 1 s para a frente
+            self.carro.acelerar(1.0)             # 1 s com o pedal a fundo para a frente
         elif self.tempo < 3.5:
-            self.carro.manter_velocidade(-30)    # trava, engata e recua
+            self.carro.recuar(1.0)               # pedal de trás a 50%: trava, engata e recua
         else:
-            self.carro.manter_velocidade(0)      # pára
+            self.carro.largar_pedal()            # larga o pedal
         self.carro.virar(0.0)
 
         if self.tempo >= self.proximo_print:
