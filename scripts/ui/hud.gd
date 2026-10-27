@@ -1,7 +1,8 @@
 extends CanvasLayer
 class_name HudCorrida
 
-# CanvasLayer fica fixo no ecrã, independente da câmara.
+## Texto de estado no canto do ecrã. Como é um CanvasLayer, fica fixo
+## independentemente da câmara.
 
 var _carro: Carro
 var _stats: EstatisticasCorrida
@@ -17,6 +18,7 @@ func _ready() -> void:
 	add_child(_label)
 
 
+## Liga o HUD ao carro e às estatísticas que vai mostrar.
 func configurar(carro: Carro, stats: EstatisticasCorrida) -> void:
 	_carro = carro
 	_stats = stats
@@ -25,6 +27,7 @@ func configurar(carro: Carro, stats: EstatisticasCorrida) -> void:
 func _process(_delta: float) -> void:
 	if _carro == null or _stats == null:
 		return
+
 	var rodas := rad_to_deg(_carro.direcao_rodas)
 	var lado := "reta"
 	if rodas > 1.0:
@@ -33,12 +36,13 @@ func _process(_delta: float) -> void:
 		lado = "esquerda"
 	var rumo := fposmod(_carro.rotation_degrees, 360.0)
 
-	_label.text = "Velocidade: %d km/h\nDireção das rodas: %.0f° (%s)\nRumo do carro: %.0f°\n\nTempo: %s\nBatidas: %d\nVoltas: %d | Última: %s | Melhor: %s\n\nR nova pista | Enter reinicia | C câmara" % [
+	_label.text = "Velocidade: %d km/h\nDireção das rodas: %.0f° (%s)\nRumo do carro: %.0f°\n\nTempo: %s\nBatidas: %d\nVoltas: %d | Última: %s | Melhor: %s" % [
 			int(_carro.velocidade_kmh()), absf(rodas), lado, rumo,
 			_formatar_tempo(_stats.tempo), _stats.batidas, _stats.voltas,
 			_formatar_tempo(_stats.ultima_volta), _formatar_tempo(_stats.melhor_volta)]
 
 
+## Formata segundos como "MM:SS.mmm". Valores negativos (sem tempo) dão "--:--.---".
 func _formatar_tempo(t: float) -> String:
 	if t < 0.0:
 		return "--:--.---"

@@ -1,7 +1,7 @@
 extends RefCounted
 class_name GeradorPista
 
-# Gera a linha central e as bordas da pista. Não toca em cenas nem em física.
+## Gera a linha central e as bordas da pista. Não toca em cenas nem em física.
 
 var largura: float
 var num_pontos: int
@@ -17,7 +17,8 @@ func _init(p_largura: float = 120.0, p_num_pontos: int = 12,
 	raio_max = p_raio_max
 
 
-# Mesma seed = mesma pista. Tenta variantes da seed até não haver curvas apertadas demais.
+## Gera a linha central. Mesma seed = mesma pista.
+## Tenta variantes da seed até não haver curvas apertadas demais.
 func gerar(seed_: int) -> PackedVector2Array:
 	var rng := RandomNumberGenerator.new()
 	var linha := PackedVector2Array()
@@ -30,7 +31,8 @@ func gerar(seed_: int) -> PackedVector2Array:
 	return linha
 
 
-# Devolve {"esquerda": PackedVector2Array, "direita": PackedVector2Array}
+## Calcula as bordas a partir da linha central.
+## Devolve {"esquerda": PackedVector2Array, "direita": PackedVector2Array}
 func calcular_bordas(linha: PackedVector2Array) -> Dictionary:
 	var n := linha.size()
 	var esquerda := PackedVector2Array()
@@ -45,7 +47,7 @@ func calcular_bordas(linha: PackedVector2Array) -> Dictionary:
 	return {"esquerda": esquerda, "direita": direita}
 
 
-# Pontos aleatórios à volta de um círculo, ligados por uma curva fechada e suave
+## Pontos aleatórios à volta de um círculo, ligados por uma curva fechada e suave
 func _linha_central_aleatoria(rng: RandomNumberGenerator) -> PackedVector2Array:
 	var pts: Array[Vector2] = []
 	for i in num_pontos:
@@ -62,7 +64,7 @@ func _linha_central_aleatoria(rng: RandomNumberGenerator) -> PackedVector2Array:
 	return amostrada
 
 
-# Raio de curvatura mínimo estimado ao longo da linha central
+## Raio de curvatura mínimo estimado ao longo da linha central
 func _raio_minimo(linha: PackedVector2Array) -> float:
 	var n := linha.size()
 	var min_r := INF

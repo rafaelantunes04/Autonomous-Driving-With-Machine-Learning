@@ -1,27 +1,19 @@
 [gd_scene format=3 uid="uid://c17ds3oqf06ur"]
 
 [ext_resource type="Script" uid="uid://c2vtaf4nabj1k" path="res://scripts/pista/track.gd" id="1_mll3j"]
-[ext_resource type="PackedScene" uid="uid://oyshle6js32d" path="res://cenas/carro.tscn" id="2_phvr8"]
+[ext_resource type="PackedScene" uid="uid://oyshle6js32d" path="res://cenas/carro.tscn" id="2_ht2i1"]
 [ext_resource type="Script" uid="uid://ujkeyt8tg0kj" path="res://scripts/pista/camara_pista.gd" id="3_cam"]
 [ext_resource type="Script" uid="uid://e0wfkdjmnm7m" path="res://scripts/corrida/estatisticas_corrida.gd" id="4_stats"]
 [ext_resource type="Script" uid="uid://8tihrf4dco16" path="res://scripts/ui/hud.gd" id="5_hud"]
-
-[sub_resource type="Curve2D" id="Curve2D_mll3j"]
-
-[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_0vdwr"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_0vdwr"]
 size = Vector2(1000, 453)
 
 [node name="Track" type="Node2D" unique_id=2083772254]
 script = ExtResource("1_mll3j")
-car_scene = ExtResource("2_phvr8")
-
-[node name="Path2D" type="Path2D" parent="." unique_id=317521467]
-curve = SubResource("Curve2D_mll3j")
+car_scene = ExtResource("2_ht2i1")
 
 [node name="Walls" type="StaticBody2D" parent="." unique_id=1861175392 groups=["paredes"]]
-physics_material_override = SubResource("PhysicsMaterial_0vdwr")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Walls" unique_id=1331457895]
 shape = SubResource("RectangleShape2D_0vdwr")

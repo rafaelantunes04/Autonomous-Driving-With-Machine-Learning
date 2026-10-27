@@ -1,9 +1,9 @@
 extends Camera2D
 class_name CamaraPista
 
-# Tecla C alterna entre a vista geral da pista e seguir o carro.
-# A vista geral é definida pela Track (definir_vista_geral), por isso
-# acompanha sempre a pista atual e o tamanho da janela.
+## Tecla C alterna entre a vista geral da pista e seguir o carro.
+## A vista geral é definida pela Track (definir_vista_geral), por isso
+## acompanha sempre a pista atual e o tamanho da janela.
 
 @export var zoom_seguir: Vector2 = Vector2(1.4, 1.4)
 @export var atraso_posicao: float = 5.0   # menor = mais atraso
@@ -31,11 +31,13 @@ func definir_vista_geral(posicao_global: Vector2, nivel_zoom: Vector2) -> void:
 		rotation = 0.0
 
 
+## C alterna entre vista geral e seguir o carro.
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_C:
 		seguir = not seguir
 
 
+## Move câmara, rotação e zoom suavemente em direção ao alvo atual.
 func _physics_process(delta: float) -> void:
 	var a_seguir := seguir and alvo != null
 	var alvo_pos := alvo.global_position if a_seguir else _vista_posicao

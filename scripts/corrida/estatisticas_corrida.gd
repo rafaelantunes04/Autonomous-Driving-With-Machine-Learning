@@ -1,13 +1,13 @@
 extends Node
 class_name EstatisticasCorrida
 
-# Conta batidas nas paredes, tempo e voltas. reiniciar() põe tudo a zero.
-#
-# - O tempo conta em tempo de física (não depende dos FPS nem do time_scale)
-#   e só começa a correr quando o carro se mexe pela primeira vez.
-# - Só conta batidas em corpos do grupo "paredes" (a Track põe lá as Walls).
-# - Uma volta fica completa quando o progresso líquido ao longo da linha
-#   central chega a uma volta inteira (marcha-atrás desconta).
+## Conta batidas nas paredes, tempo e voltas. reiniciar() põe tudo a zero.
+##
+## - O tempo conta em tempo de física (não depende dos FPS nem do time_scale)
+##   e só começa a correr quando o carro se mexe pela primeira vez.
+## - Só conta batidas em corpos do grupo "paredes" (a Track põe lá as Walls).
+## - Uma volta fica completa quando o progresso líquido ao longo da linha
+##   central chega a uma volta inteira (marcha-atrás desconta).
 
 signal batida_registada(total: int)
 signal volta_concluida(numero: int, tempo: float)
@@ -31,6 +31,7 @@ var _inicio_volta: float = 0.0
 var _tempo_ultima_batida: float = -INF
 
 
+## Liga-se ao carro e passa a ouvir as suas colisões.
 func configurar(carro: Carro) -> void:
 	_carro = carro
 	_carro.colidiu.connect(_ao_colidir)
@@ -41,6 +42,7 @@ func definir_pista(linha: PackedVector2Array) -> void:
 	_linha = linha
 
 
+## Põe batidas, tempo e voltas a zero.
 func reiniciar() -> void:
 	batidas = 0
 	tempo = 0.0
@@ -65,6 +67,7 @@ func _physics_process(delta: float) -> void:
 	_atualizar_progresso()
 
 
+## Conta uma batida se for numa parede, rápida o bastante e não repetida demasiado depressa.
 func _ao_colidir(colisor: Node, velocidade_kmh: float) -> void:
 	if colisor == null or not colisor.is_in_group("paredes"):
 		return
@@ -78,6 +81,7 @@ func _ao_colidir(colisor: Node, velocidade_kmh: float) -> void:
 	batida_registada.emit(batidas)
 
 
+## Atualiza o progresso ao longo da linha central e conta a volta quando chega a uma volta inteira.
 func _atualizar_progresso() -> void:
 	var n := _linha.size()
 	var meio := int(n * 0.5)
@@ -102,6 +106,7 @@ func _atualizar_progresso() -> void:
 		_concluir_volta()
 
 
+## Regista a volta terminada e atualiza última/melhor volta.
 func _concluir_volta() -> void:
 	voltas += 1
 	var duracao := tempo - _inicio_volta

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""
-Faz download do py4godot.zip e extrai apenas install_dir/addons/ para
+"""Descarrega o py4godot e instala-o em <destino>/addons/.
+
+Faz download do py4godot.zip e extrai apenas `install_dir/addons/` para
 <destino>/addons/ (por omissão, a pasta onde este script está).
 Se addons/py4godot/ já existir, não faz nada (a não ser que uses --force).
 
+Requer: pip install tqdm
+
 Uso:
-    python download_py4godot.py
-    python download_py4godot.py --force
-    python download_py4godot.py --url "<outro_url>" --dest "C:/caminho/projeto"
+    python download_addon.py
+    python download_addon.py --force
+    python download_addon.py --url "<outro_url>" --dest "C:/caminho/projeto"
 """
 
 import argparse
@@ -18,44 +21,46 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-DEFAULT_URL = (
-    "https://release-assets.githubusercontent.com/github-production-release-asset/"
-    "366836572/216a4f79-c712-4837-af2c-1fae47ea9e20?sp=r&sv=2018-11-09&sr=b&spr=https"
-    "&se=2026-10-27T15%3A28%3A46Z&rscd=attachment%3B+filename%3Dpy4godot.zip"
-    "&rsct=application%2Foctet-stream&skoid=96c2d410-5711-43a1-aedd-ab1947aa7ab0"
-    "&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skt=2026-10-27T14%3A28%3A37Z"
-    "&ske=2026-10-27T15%3A28%3A46Z&sks=b&skv=2018-11-09"
-    "&sig=PzPoUqTAE0VaseXFh3RZGj0u5yXgNNhLD3xvWdd%2Bbn8%3D"
-    "&jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmVsZWFzZS1hc3NldHMuZ2l0aHVidXNlcmNvbnRlbnQuY29tIiwia2V5Ijoia2V5MSIsImV4cCI6MTc5MzExNDkxNywibmJmIjoxNzkzMTExMzE3LCJwYXRoIjoicmVsZWFzZWFzc2V0cHJvZHVjdGlvbi5ibG9iLmNvcmUud2luZG93cy5uZXQifQ.w5i4bHheew-nfUtdYkyB_8-O-PtpbX6hHn4D5Ean6jo"
-    "&response-content-disposition=attachment%3B%20filename%3Dpy4godot.zip"
-    "&response-content-type=application%2Foctet-stream"
-)
+from tqdm import tqdm
 
+# Release mais recente do py4godot no GitHub. Se mudar, usa --url.
+DEFAULT_URL = "https://github.com/niklas2902/py4godot/releases/latest/download/py4godot.zip"
+
+# Pasta dentro do zip que contém os addons
 PREFIX = "install_dir/addons/"
+
+# Tamanho dos blocos lidos em cada passo do download (bytes)
+CHUNK = 64 * 1024
 
 
 def download(url: str, target: Path) -> None:
-    print("A fazer download...")
+    """Descarrega `url` para o ficheiro `target`, com barra de progresso."""
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req) as resp, open(target, "wb") as out:
-        shutil.copyfileobj(resp, out)
-    print(f"Download concluído ({target.stat().st_size / 1_048_576:.1f} MB)")
+        total = int(resp.headers.get("Content-Length") or 0) or None  # None = tamanho desconhecido
+        with tqdm(total=total, unit="B", unit_scale=True, unit_divisor=1024,
+                  desc="Download") as barra:
+            while chunk := resp.read(CHUNK):
+                out.write(chunk)
+                barra.update(len(chunk))
 
 
 def extract_addons(zip_path: Path, dest: Path) -> int:
+    """Extrai só `install_dir/addons/` do zip para `dest/addons/`.
+
+    Ignora caminhos que tentem sair de `dest`. Devolve o número de ficheiros extraídos.
+    """
     dest = dest.resolve()
     count = 0
     with zipfile.ZipFile(zip_path) as zf:
-        for member in zf.infolist():
-            name = member.filename
-            if not name.startswith(PREFIX):
-                continue
-            rel = name[len("install_dir/"):]  # -> "addons/..."
-            if not rel or rel == "addons/":
+        membros = [m for m in zf.infolist() if m.filename.startswith(PREFIX)]
+        for member in tqdm(membros, desc="A extrair", unit="ficheiro"):
+            rel = member.filename[len("install_dir/"):]  # -> "addons/..."
+            if rel == "addons/":
                 continue
             out_path = (dest / rel).resolve()
-            if dest not in out_path.parents and out_path != dest:
-                continue  # proteção contra paths maliciosos
+            if dest not in out_path.parents:
+                continue  # proteção contra caminhos maliciosos
             if member.is_dir():
                 out_path.mkdir(parents=True, exist_ok=True)
                 continue
@@ -67,9 +72,11 @@ def extract_addons(zip_path: Path, dest: Path) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--url", default=DEFAULT_URL)
-    parser.add_argument("--dest", default=str(Path(__file__).resolve().parent))
+    """Lê os argumentos, descarrega o zip e instala os addons. Devolve o código de saída."""
+    parser = argparse.ArgumentParser(description="Instala o addon py4godot no projeto.")
+    parser.add_argument("--url", default=DEFAULT_URL, help="URL do py4godot.zip")
+    parser.add_argument("--dest", default=str(Path(__file__).resolve().parent),
+                        help="pasta do projeto Godot (por omissão, a deste script)")
     parser.add_argument("--force", action="store_true",
                         help="descarregar e substituir mesmo que addons/py4godot/ já exista")
     args = parser.parse_args()
@@ -88,8 +95,7 @@ def main() -> int:
             download(args.url, zip_path)
         except Exception as e:
             print(f"Erro no download: {e}\n"
-                  "O link assinado do GitHub expira ao fim de ~1 hora; "
-                  "gera um novo na página de releases e usa --url.")
+                  "Confirma o URL ou passa outro com --url.")
             return 1
         n = extract_addons(zip_path, dest)
 
