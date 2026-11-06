@@ -1,6 +1,22 @@
 extends Node2D
 class_name Track
 
+# Configurações da nossa corrida de IA
+
+@export_group("Corrida IA")
+
+@export var numero_carros: int = 3 # quantos carros participarão da corrida.
+
+@export var voltas_para_vencer: int = 5 #  voltas para ganhar.
+
+@export var tempo_maximo: float = 270.0 # duração maxima da corrida em segundos
+
+@export var corridas_avaliacao: int = 10 # Quantidade de corridas para comparar os modelos
+
+@export var colisao_entre_carros: bool = false # Define se haverá colisões entre os veículos
+
+@export var pista_aleatoria_por_corrida: bool = true # uma pista diferentes em cada corrida
+
 # Orquestra a corrida: gera a pista (GeradorPista), cria as paredes de colisão,
 # põe o carro na partida e liga as peças (estatísticas, HUD, câmara).
 
@@ -24,6 +40,19 @@ var current_seed := 0
 var car: Carro
 var start_position := Vector2.ZERO
 var start_rotation := 0.0
+
+# Lista de carros participantes da corrida
+var carros: Array[Carro] = []
+
+# Estatísticas individuais dos carros
+var estatisticas_carros: Array[EstatisticasCorrida] = []
+
+# Nomes dos modelos de inteligência artificial
+var modelos_ia: Array[String] = [
+	"PPO_MLP",
+	"PPO_LSTM",
+    "SAC_MLP"
+]
 
 var _gerador: GeradorPista
 
@@ -57,10 +86,33 @@ func generate(seed_: int) -> void:
 
 ## Volta a pôr o carro na partida e põe batidas, tempo e voltas a zero.
 func reiniciar_corrida() -> void:
-	if car == null:
+	if carros.is_empty():
 		return
-	car.reiniciar(to_global(start_position), global_rotation + start_rotation)
-	_stats.reiniciar()
+
+	for i in range(carros.size()):
+		var novo_carro = carros[i]
+
+		# Distribui os carros ao longo da pista
+		var distancia_lateral = (i - 1) * 35.0
+
+		# Pequena diferença longitudinal
+		var distancia_frontal = -i * 45.0
+
+		var deslocamento = Vector2(
+			distancia_frontal,
+			distancia_lateral
+		).rotated(start_rotation)
+
+		novo_carro.reiniciar(
+			to_global(start_position + deslocamento),
+			global_rotation + start_rotation
+		)
+
+	# Reinicia as estatísticas de todos os carros
+	for stats in estatisticas_carros:
+		stats.reiniciar()
+
+	_hud.reiniciar_cronometro()
 
 
 # Bordas, paredes de colisão, ponto de partida, carro, desenho e câmara
@@ -80,7 +132,9 @@ func _build() -> void:
 
 	_compute_start()
 	_garantir_carro()
-	_stats.definir_pista(centerline)
+	# Informa a pista para as estatísticas de todos os carros
+	for stats in estatisticas_carros:
+		stats.definir_pista(centerline)
 	reiniciar_corrida()
 	queue_redraw()
 	_fit_camera()
@@ -95,14 +149,74 @@ func _compute_start() -> void:
 
 # Cria o carro na primeira vez e liga-o às estatísticas, HUD e câmara
 func _garantir_carro() -> void:
-	if car != null or car_scene == null:
+	if not carros.is_empty() or car_scene == null:
 		return
-	car = car_scene.instantiate() as Carro
-	add_child(car)
-	_stats.configurar(car)
-	_hud.configurar(car, _stats)
+
+	for i in range(numero_carros):
+		var novo_carro := car_scene.instantiate() as Carro
+
+		# Identifica cada participante
+		novo_carro.name = "Carro_" + str(i + 1)
+
+		# Por enquanto, todos usam controle manual
+		novo_carro.controlo_manual = true
+
+		# Carros não colidem entre si,
+		# mas continuam colidindo com as paredes
+		novo_carro.collision_layer = 2
+		novo_carro.collision_mask = 1
+
+		add_child(novo_carro)
+		carros.append(novo_carro)
+
+		# Uma cor para cada carro
+		var cores = [
+			Color.BLUE,
+			Color.RED,
+			Color.GREEN
+		]
+
+		novo_carro.modulate = cores[i % cores.size()]
+
+		# Posições provisórias, próximas à largada
+		var deslocamento := Vector2(0, (i - 1) * 30.0)
+		novo_carro.reiniciar(
+			to_global(start_position + deslocamento.rotated(start_rotation)),
+			global_rotation + start_rotation
+		)
+
+		print("Criado: ", novo_carro.name)
+
+	# Mantém compatibilidade com o código original
+	car = carros[0]
+
+	# Cria estatísticas individuais para cada carro
+	for i in range(carros.size()):
+		var stats: EstatisticasCorrida
+
+		if i == 0:
+		   # Primeiro carro utiliza as estatísticas originais
+			stats = _stats
+		else:
+			# Outros carros recebem estatísticas próprias
+			stats = EstatisticasCorrida.new()
+			stats.name = "Estatisticas_Carro_" + str(i + 1)
+			add_child(stats)
+
+		# Associa as estatísticas ao carro correspondente
+		stats.configurar(carros[i])
+		estatisticas_carros.append(stats)
+
+	# HUD e câmera continuam acompanhando o primeiro carro
+	_hud.configurar_corrida(
+		carros,
+		estatisticas_carros,
+		voltas_para_vencer,
+		tempo_maximo,
+		corridas_avaliacao
+	)
+
 	_camera.alvo = car
-	_adicionar_controlador_python()   #descomentar para o script python
 
 
 func _adicionar_controlador_python() -> void:
