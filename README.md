@@ -53,12 +53,15 @@ O HUD mostra velocidade, direção das rodas, rumo, tempo, batidas e voltas (úl
 
 ## 3. Controlar o carro com Python
 
-Cada carro é conduzido por um **controlador**: um script que se torna nó filho do carro e lhe dá os comandos a cada tick de física. Quem escolhe o controlador de cada carro é a lista `participantes` do nó **Corrida** (`cenas/track.tscn`). Se a lista estiver vazia, correm 3 carros controlados pelo teclado.
+Cada carro é conduzido por um **controlador**: um script que se torna nó filho do carro e lhe dá os comandos a cada tick de física. Quem escolhe o controlador de cada carro é o `_ready()` de `scripts/corrida/corrida.gd`, onde cada carro é uma linha com `Carro.instanciate(...)` (ver 4.0). Por omissão correm 3 carros controlados pelo teclado.
 
 Para o Python conduzir um carro:
 
-1. Seleciona o nó **Corrida** em `cenas/track.tscn` e adiciona um elemento a `participantes` (novo `ParticipanteConfig`).
-2. No campo `controlador` desse participante, escolhe o `main.py`.
+1. Abre `scripts/corrida/corrida.gd` e, no `_ready()`, troca o controlador de um carro (ou acrescenta uma linha):
+   ```gdscript
+   Carro.instanciate(Carro.criar_config(Color.RED, load("res://main.py"), "Python"))
+   ```
+2. O segundo argumento é o script que conduz o carro: `ControladorTeclado`, um `.gd` teu, ou `load("res://main.py")`.
 3. Corre o jogo (F5). Na consola deve aparecer `[main] pronto`.
 
 Cada participante pode ter um script diferente (outro `.py`, ou um `.gd` que herde de `ControladorCarro`). Um participante sem `controlador` fica parado.
@@ -86,14 +89,14 @@ from carro_api import CarroAPI
 @gdclass
 class main(Node):                      # mantém o nome da classe igual ao do ficheiro
 
-    def _ready(self) -> None:
-        # corre uma vez; o nó pai é o carro
-        self.carro = CarroAPI(self.get_parent())
+	def _ready(self) -> None:
+		# corre uma vez; o nó pai é o carro
+		self.carro = CarroAPI(self.get_parent())
 
-    def _physics_process(self, delta: float) -> None:
-        # corre a cada tick de física (~60x por segundo): decide aqui o que fazer
-        self.carro.acelerar(0.8)
-        self.carro.virar(0.0)
+	def _physics_process(self, delta: float) -> None:
+		# corre a cada tick de física (~60x por segundo): decide aqui o que fazer
+		self.carro.acelerar(0.8)
+		self.carro.virar(0.0)
 ```
 
 Depois de gravares, volta a correr o jogo (F5) para ver as alterações.
@@ -135,10 +138,22 @@ O carro também já tem `reiniciar(posicao, rotacao)` em GDScript, que podes exp
 
 ## 4. Editar o jogo no Godot
 
+### 4.0 Criar carros por código: `Carro.instanciate()`
+
+Um carro completo (física, cor, controlador e estatísticas) cria-se numa linha, no `_ready()` da `Corrida`:
+
+```gdscript
+Carro.instanciate(Carro.criar_config(Color.YELLOW, ControladorTeclado, "Amarelo"))
+Carro.instanciate(Carro.criar_config(Color.RED, load("res://main.py"), "Python"))
+Carro.instanciate()   # sem config = carro branco de teclado
+```
+
+`Carro.criar_config(cor, controlador, nome, fisica)` — só a cor e o controlador são importantes; `nome` e `fisica` (um `CarroConfig`) são opcionais. O carro é criado na cena atual (ou no nó passado em `Carro.instanciate(config, pai)`) e entra no grupo `carros`, que a `Corrida` usa para ligar o HUD e a câmara. Cada carro traz consigo o controlador (`carro.controlador`) e as estatísticas (`carro.estatisticas`: batidas, tempo, voltas).
+
 ### 4.1 Parâmetros sem mexer em código
 Seleciona o nó e altera os valores no **Inspetor** (painel da direita).
 
-**Carro** → os parâmetros de física estão num recurso `CarroConfig` (`scripts/carro/carro_config.gd`). Podes criar um novo no Inspetor (e guardá-lo em `.tres`, uma variante por ficheiro) e atribuí-lo ao campo `config` de um participante. Estão agrupados:
+**Carro** → os parâmetros de física estão num recurso `CarroConfig` (`scripts/carro/carro_config.gd`). Podes criar um novo no Inspetor (e guardá-lo em `.tres`, uma variante por ficheiro) e passá-lo como 4.º argumento de `Carro.criar_config()`. Estão agrupados:
 
 | Grupo | O que controla |
 |---|---|
@@ -153,11 +168,9 @@ Seleciona o nó e altera os valores no **Inspetor** (painel da direita).
 
 | Parâmetro | O que faz |
 |---|---|
-| `participantes` | Lista de carros: `nome`, `cor`, `config` (CarroConfig) e `controlador` (script) de cada um. Vazia = 3 carros com teclado |
 | `partida_sobreposta` | `true` = todos os carros partem do mesmo ponto; `false` = partem em grelha |
 | `colisao_entre_carros` | Se os carros se empurram (usa com `partida_sobreposta` desligado) |
 | `voltas_para_vencer` / `tempo_maximo` / `corridas_avaliacao` | Regras mostradas no HUD |
-| `car_scene` | Cena usada para o carro |
 
 **Pista** → seleciona o nó `Pista` (filho de `Corrida`):
 
@@ -190,21 +203,21 @@ Notas: um Path2D aberto é fechado automaticamente; se a curva for apertada dema
 ├── download_addon.py       ← instala o py4godot
 ├── project.godot           ← configuração do projeto Godot
 ├── cenas/
-│   ├── track.tscn          ← cena principal (Corrida, Pista, câmara, HUD, estatísticas)
+│   ├── track.tscn          ← cena principal (Corrida, Pista, câmara, HUD)
 │   └── carro.tscn          ← cena do carro
 └── scripts/
-    ├── carro/carro.gd                 ← física do carro
-    ├── carro/carro_config.gd          ← parâmetros do carro (resource)
-    ├── carro/controlador_carro.gd     ← base dos controladores GDScript
-    ├── carro/controlador_teclado.gd   ← controlador por teclado
-    ├── pista/pista.gd                 ← geometria da pista (Path2D ou aleatória)
-    ├── pista/gerador_pista.gd         ← geração aleatória (devolve uma Curve2D)
-    ├── pista/geometria_pista.gd       ← bordas e validação da pista
-    ├── pista/camara_pista.gd          ← câmara (vista geral / seguir carro)
-    ├── corrida/corrida.gd             ← cria carros, liga controladores, HUD e câmara
-    ├── corrida/participante_config.gd ← nome, cor, config e controlador de um carro
-    ├── corrida/estatisticas_corrida.gd← batidas, tempo e voltas
-    └── ui/hud.gd                      ← texto no ecrã
+	├── carro/carro.gd                 ← física do carro + Carro.instanciate()
+	├── carro/carro_config.gd          ← parâmetros do carro (resource)
+	├── carro/controlador_carro.gd     ← base dos controladores GDScript
+	├── carro/controlador_teclado.gd   ← controlador por teclado
+	├── pista/pista.gd                 ← geometria da pista (Path2D ou aleatória)
+	├── pista/gerador_pista.gd         ← geração aleatória (devolve uma Curve2D)
+	├── pista/geometria_pista.gd       ← bordas e validação da pista
+	├── pista/camara_pista.gd          ← câmara (vista geral / seguir carro)
+	├── corrida/corrida.gd             ← chama Carro.instanciate() e liga HUD e câmara
+	├── corrida/participante_config.gd ← nome, cor, config e controlador de um carro
+	├── corrida/estatisticas_corrida.gd← batidas, tempo e voltas
+	└── ui/hud.gd                      ← texto no ecrã
 ```
 
 ### 4.3 Convenções importantes

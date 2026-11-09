@@ -1,24 +1,24 @@
 [gd_scene format=3 uid="uid://c17ds3oqf06ur"]
 
 [ext_resource type="Script" uid="uid://uvm360pmxvlm" path="res://scripts/corrida/corrida.gd" id="1_corrida"]
-[ext_resource type="PackedScene" uid="uid://oyshle6js32d" path="res://cenas/carro.tscn" id="2_ht2i1"]
 [ext_resource type="Script" uid="uid://ujkeyt8tg0kj" path="res://scripts/pista/camara_pista.gd" id="3_cam"]
-[ext_resource type="Script" uid="uid://b8rdijvo1qt0a" path="res://scripts/corrida/estatisticas_corrida.gd" id="4_stats"]
+[ext_resource type="PackedScene" uid="uid://cqlk3gh7pob8q" path="res://cenas/pista1.tscn" id="3_ht2i1"]
 [ext_resource type="Script" uid="uid://b328133d4n5df" path="res://scripts/ui/hud.gd" id="5_hud"]
 [ext_resource type="Script" uid="uid://3dfv0xvs8jv7" path="res://scripts/pista/pista.gd" id="6_pista"]
 
 [node name="Corrida" type="Node2D" unique_id=384909941]
 script = ExtResource("1_corrida")
-car_scene = ExtResource("2_ht2i1")
 
-[node name="Pista" type="Node2D" parent="." unique_id=1872404368]
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1563017960]
+
+[node name="Pista" type="Node2D" parent="." unique_id=1872404368 node_paths=PackedStringArray("path")]
 script = ExtResource("6_pista")
+path = NodePath("")
+
+[node name="Path2D" parent="Pista" unique_id=1955650876 instance=ExtResource("3_ht2i1")]
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=1824097061]
 script = ExtResource("3_cam")
-
-[node name="Estatisticas" type="Node" parent="." unique_id=547218116]
-script = ExtResource("4_stats")
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1143185496]
 script = ExtResource("5_hud")

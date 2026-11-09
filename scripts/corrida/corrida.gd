@@ -1,18 +1,11 @@
-
-## Orquestra a corrida: cria os carros a partir dos participantes, liga-lhes os
-## controladores, as estatísticas, o HUD e a câmara, e trata de reiniciar.
+## Orquestra a corrida: cria os carros (Carro.instanciate), liga o HUD e a
+## câmara a eles, e trata de reiniciar.
 ## A geometria da pista vive na Pista (filha desta cena).
 
 extends Node2D
 class_name Corrida
 
-const CAMADA_PAREDES := 1
-const CAMADA_CARROS := 2
-
 @export_group("Corrida IA")
-
-## Quem corre. Vazio = 3 carros controlados pelo teclado (para testar).
-@export var participantes: Array[ParticipanteConfig] = []
 
 @export var voltas_para_vencer: int = 5 # voltas para ganhar.
 
@@ -29,24 +22,24 @@ const CAMADA_CARROS := 2
 
 @export var pista_aleatoria_por_corrida: bool = true # ainda não usado: uma pista diferente em cada corrida
 
-@export var car_scene: PackedScene  # arrasta aqui a cena do carro no Inspetor
-
 # Lista de carros participantes da corrida
 var carros: Array[Carro] = []
 
-# Estatísticas individuais dos carros
-var estatisticas_carros: Array[EstatisticasCorrida] = []
-
 @onready var _pista: Pista = $Pista
 @onready var _camera: CamaraPista = $Camera2D
-@onready var _stats: EstatisticasCorrida = $Estatisticas
 @onready var _hud: HudCorrida = $HUD
 
 
 func _ready() -> void:
 	get_viewport().size_changed.connect(_fit_camera)
 	_pista.pista_alterada.connect(_ao_pista_alterada)
-	_criar_carros()
+
+	# Um carro por linha: cor + script que o conduz (ControladorTeclado, ou load("res://main.py"))
+	Carro.instanciate(Carro.criar_config(Color.YELLOW, ControladorTeclado, "Amarelo"))
+	Carro.instanciate(Carro.criar_config(Color(0.95, 0.27, 0.30), load("res://main.py"), "Vermelho"))
+	Carro.instanciate(Carro.criar_config(Color(0.20, 0.83, 0.49), load("res://modelo_x.py"), "Verde"))
+
+	_ligar_carros()
 	_ao_pista_alterada()
 
 
@@ -74,9 +67,6 @@ func reiniciar_corrida() -> void:
 			_pista.to_global(_pista.start_position + _deslocamento_partida(i)),
 			_pista.global_rotation + _pista.start_rotation)
 
-	for stats in estatisticas_carros:
-		stats.reiniciar()
-
 	_hud.reiniciar_cronometro()
 
 
@@ -84,8 +74,8 @@ func reiniciar_corrida() -> void:
 
 ## A pista mudou (nova seed, Path2D editado): atualiza as estatísticas e recomeça.
 func _ao_pista_alterada() -> void:
-	for stats in estatisticas_carros:
-		stats.definir_pista(_pista.centerline, _pista)
+	for carro in carros:
+		carro.estatisticas.definir_pista(_pista.centerline, _pista)
 	reiniciar_corrida()
 	_fit_camera()
 
@@ -99,77 +89,27 @@ func _deslocamento_partida(i: int) -> Vector2:
 	return Vector2(frontal, lateral).rotated(_pista.start_rotation)
 
 
-func _participantes_por_omissao() -> Array[ParticipanteConfig]:
-	var cores: Array[Color] = [
-		Color(0.25, 0.59, 1.0),
-		Color(0.95, 0.27, 0.30),
-		Color(0.20, 0.83, 0.49),
-	]
-	var lista: Array[ParticipanteConfig] = []
-	for i in cores.size():
-		var p := ParticipanteConfig.new()
-		p.nome = "Carro %d" % (i + 1)
-		p.cor = cores[i]
-		p.controlador = preload("res://scripts/carro/controlador_teclado.gd")
-		lista.append(p)
-	return lista
-
-
-## Cria um carro por participante e liga-o às estatísticas, HUD e câmara.
-func _criar_carros() -> void:
-	if car_scene == null:
-		push_error("Corrida: falta atribuir car_scene.")
-		return
+## Regras da corrida que se aplicam a todos os carros, mais HUD e câmara.
+func _ligar_carros() -> void:
 	if colisao_entre_carros and partida_sobreposta:
 		push_warning("Corrida: com colisao_entre_carros ligado, desliga partida_sobreposta (os carros sobrepostos seriam empurrados).")
 
-	var lista: Array[ParticipanteConfig] = participantes if not participantes.is_empty() else _participantes_por_omissao()
+	carros.assign(get_tree().get_nodes_in_group(Carro.GRUPO))
+	if carros.is_empty():
+		push_error("Corrida: não há carros. Cria-os no _ready com Carro.instanciate().")
+		return
+
 	var nomes: Array[String] = []
 	var cores: Array[Color] = []
+	var estatisticas: Array[EstatisticasCorrida] = []
 
-	for i in lista.size():
-		var p := lista[i]
-		var carro := car_scene.instantiate() as Carro
-		carro.name = "Carro_%d" % (i + 1)
-		if p.config != null:
-			carro.config = p.config.duplicate() as CarroConfig   # cópia própria de cada carro
+	for carro in carros:
+		carro.permitir_colisao_entre_carros(colisao_entre_carros)
+		nomes.append(carro.nome_exibicao)
+		cores.append(carro.cor)
+		estatisticas.append(carro.estatisticas)
 
-		# Por omissão os carros só colidem com as paredes
-		carro.collision_layer = CAMADA_CARROS
-		carro.collision_mask = CAMADA_PAREDES | (CAMADA_CARROS if colisao_entre_carros else 0)
-		carro.modulate = p.cor
-		carro.z_index = lista.size() - i   # o primeiro (o que a câmara segue) fica por cima
-		add_child(carro)
-		carros.append(carro)
-
-		var modelo := ""
-		if p.controlador != null:
-			var controlador := Node.new()
-			controlador.name = "Controlador"
-			controlador.set_script(p.controlador)
-			carro.add_child(controlador)
-			var nome_modelo = controlador.get("nome_modelo")   # null se o script não tiver
-			if nome_modelo is String:
-				modelo = nome_modelo
-
-		var nome: String = p.nome if not p.nome.is_empty() else String(carro.name)
-		nomes.append(nome if modelo.is_empty() else "%s (%s)" % [nome, modelo])
-		cores.append(p.cor)
-		print("Criado: ", carro.name)
-
-	# Estatísticas individuais: o primeiro carro usa o nó da cena, os outros ganham um novo
-	for i in carros.size():
-		var stats: EstatisticasCorrida
-		if i == 0:
-			stats = _stats
-		else:
-			stats = EstatisticasCorrida.new()
-			stats.name = "Estatisticas_Carro_%d" % (i + 1)
-			add_child(stats)
-		stats.configurar(carros[i])
-		estatisticas_carros.append(stats)
-
-	_hud.configurar_corrida(carros, estatisticas_carros, voltas_para_vencer,
+	_hud.configurar_corrida(carros, estatisticas, voltas_para_vencer,
 			tempo_maximo, corridas_avaliacao, nomes, cores)
 
 	# A câmara acompanha o primeiro carro
