@@ -17,6 +17,10 @@ const CORES = [
 var _carros: Array[Carro] = []
 var _estatisticas: Array[EstatisticasCorrida] = []
 
+# Nome e cor de cada carro (vêm dos participantes). Se faltarem, usa NOMES / CORES.
+var _nomes: Array[String] = []
+var _cores: Array[Color] = []
+
 var _total_voltas: int = 5
 var _tempo_limite: float = 270.0
 var _total_corridas: int = 10
@@ -41,13 +45,17 @@ func configurar_corrida(
     estatisticas: Array[EstatisticasCorrida],
     total_voltas: int,
     tempo_limite: float = 270.0,
-    total_corridas: int = 10
+    total_corridas: int = 10,
+    nomes: Array[String] = [],
+    cores: Array[Color] = []
 ) -> void:
     _carros = carros
     _estatisticas = estatisticas
     _total_voltas = total_voltas
     _tempo_limite = tempo_limite
     _total_corridas = total_corridas
+    _nomes = nomes
+    _cores = cores
 
     _cabecalho_corrida.text = "01/%02d" % _total_corridas
     _regras.text = "%d VOLTAS  |  LIMITE %.0f s" % [
@@ -190,7 +198,7 @@ func _criar_linha_carro(i: int) -> void:
 
     # Barra de cor do carro
     var barra := ColorRect.new()
-    barra.color = CORES[i % CORES.size()]
+    barra.color = _cor_carro(i)
     barra.custom_minimum_size = Vector2(4, 0)
     horizontal.add_child(barra)
 
@@ -201,7 +209,7 @@ func _criar_linha_carro(i: int) -> void:
     horizontal.add_child(coluna)
 
     var nome := _novo_label(
-        NOMES[i % NOMES.size()],
+        _nome_carro(i),
         16,
         Color.WHITE
     )
@@ -308,14 +316,26 @@ func _process(_delta: float) -> void:
             rank
         )
 
-    # Melhor volta entre os tres carros
+    # Melhor volta entre todos os carros
     if melhor_carro >= 0:
         _melhor_geral.text = "%s - %s" % [
-            NOMES[melhor_carro],
+            _nome_carro(melhor_carro),
             _formatar_tempo(melhor_tempo)
         ]
     else:
         _melhor_geral.text = "Aguardando primeira volta..."
+
+
+func _nome_carro(i: int) -> String:
+    if i < _nomes.size():
+        return _nomes[i]
+    return NOMES[i % NOMES.size()]
+
+
+func _cor_carro(i: int) -> Color:
+    if i < _cores.size():
+        return _cores[i]
+    return CORES[i % CORES.size()]
 
 
 func _formatar_tempo(tempo: float) -> String:

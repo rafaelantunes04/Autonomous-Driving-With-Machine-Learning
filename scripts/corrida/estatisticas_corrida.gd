@@ -5,7 +5,7 @@ class_name EstatisticasCorrida
 ##
 ## - O tempo conta em tempo de física (não depende dos FPS nem do time_scale)
 ##   e só começa a correr quando o carro se mexe pela primeira vez.
-## - Só conta batidas em corpos do grupo "paredes" (a Track põe lá as Walls).
+## - Só conta batidas em corpos do grupo "paredes" (a Pista põe lá as paredes).
 ## - Uma volta fica completa quando o progresso líquido ao longo da linha
 ##   central chega a uma volta inteira (marcha-atrás desconta).
 
@@ -25,6 +25,7 @@ var a_correr: bool = false
 
 var _carro: Carro
 var _linha := PackedVector2Array()
+var _referencial: Node2D   # nó em cujas coordenadas locais está a linha central (a Pista)
 var _indice: int = 0
 var _progresso: int = 0
 var _inicio_volta: float = 0.0
@@ -37,9 +38,11 @@ func configurar(carro: Carro) -> void:
 	_carro.colidiu.connect(_ao_colidir)
 
 
-## Linha central em coordenadas da Track (o carro é filho da Track).
-func definir_pista(linha: PackedVector2Array) -> void:
+## Linha central em coordenadas locais de `referencial` (a Pista). A posição do
+## carro é convertida para essas coordenadas, por isso o carro pode estar noutro nó.
+func definir_pista(linha: PackedVector2Array, referencial: Node2D) -> void:
 	_linha = linha
+	_referencial = referencial
 
 
 ## Põe batidas, tempo e voltas a zero.
@@ -86,12 +89,15 @@ func _atualizar_progresso() -> void:
 	var n := _linha.size()
 	var meio := int(n * 0.5)
 
+	# Posição do carro nas coordenadas da linha central
+	var posicao := _referencial.to_local(_carro.global_position) if _referencial != null else _carro.position
+
 	# Ponto da linha central mais próximo, procurando só perto do anterior
 	var melhor := _indice
 	var melhor_d := INF
 	for k in range(-janela_procura, janela_procura + 1):
 		var i := posmod(_indice + k, n)
-		var d := _carro.position.distance_squared_to(_linha[i])
+		var d := posicao.distance_squared_to(_linha[i])
 		if d < melhor_d:
 			melhor_d = d
 			melhor = i

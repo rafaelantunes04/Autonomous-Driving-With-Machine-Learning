@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://oyshle6js32d"]
 
-[ext_resource type="Script" uid="uid://hex11p1notvc" path="res://scripts/carro/carro.gd" id="1_dvi8e"]
+[ext_resource type="Script" uid="uid://difrhadmqgosn" path="res://scripts/carro/carro.gd" id="1_dvi8e"]
 
 [sub_resource type="QuadMesh" id="QuadMesh_0vdwr"]
 size = Vector2(40, 20)
@@ -8,11 +8,24 @@ size = Vector2(40, 20)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_0vdwr"]
 size = Vector2(40, 20)
 
-[node name="Carro" type="CharacterBody2D"]
+[sub_resource type="CircleShape2D" id="CircleShape2D_0vdwr"]
+radius = 37.93
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_vesfi"]
+
+[node name="Carro" type="CharacterBody2D" unique_id=2094196626]
 script = ExtResource("1_dvi8e")
 
-[node name="MeshInstance2D" type="MeshInstance2D" parent="."]
+[node name="MeshInstance2D" type="MeshInstance2D" parent="." unique_id=122173314]
 mesh = SubResource("QuadMesh_0vdwr")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=964037768]
 shape = SubResource("RectangleShape2D_0vdwr")
+
+[node name="Area2D" type="Area2D" parent="." unique_id=1046258689]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D" unique_id=1827344959]
+shape = SubResource("CircleShape2D_0vdwr")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=103743706]
+texture = SubResource("ViewportTexture_vesfi")

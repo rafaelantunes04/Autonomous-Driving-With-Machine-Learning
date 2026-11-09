@@ -32,14 +32,14 @@ class CarroAPI:
     """Interface simples para controlar o carro (um nó Carro do Godot)."""
 
     def __init__(self, no_carro):
-        """Liga a API ao nó do carro e desativa o controlo pelas setas.
+        """Liga a API ao nó do carro.
 
-        `no_carro` é o nó Godot com o script carro.gd. A partir daqui o carro
-        deixa de ler o teclado: quem manda é este código.
+        `no_carro` é o nó Godot com o script carro.gd (o pai do controlador).
+        O carro já não lê o teclado por si: só obedece a quem for o seu
+        controlador, que aqui é este código.
         """
         self._no = no_carro
         self._erros_mostrados = set()
-        self._escrever("controlo_manual", False)
 
     # ------------------------------------------------------------ comandos
 

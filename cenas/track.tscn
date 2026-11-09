@@ -1,28 +1,24 @@
 [gd_scene format=3 uid="uid://c17ds3oqf06ur"]
 
-[ext_resource type="Script" uid="uid://c2vtaf4nabj1k" path="res://scripts/pista/track.gd" id="1_mll3j"]
+[ext_resource type="Script" uid="uid://uvm360pmxvlm" path="res://scripts/corrida/corrida.gd" id="1_corrida"]
 [ext_resource type="PackedScene" uid="uid://oyshle6js32d" path="res://cenas/carro.tscn" id="2_ht2i1"]
 [ext_resource type="Script" uid="uid://ujkeyt8tg0kj" path="res://scripts/pista/camara_pista.gd" id="3_cam"]
-[ext_resource type="Script" uid="uid://e0wfkdjmnm7m" path="res://scripts/corrida/estatisticas_corrida.gd" id="4_stats"]
-[ext_resource type="Script" uid="uid://8tihrf4dco16" path="res://scripts/ui/hud.gd" id="5_hud"]
+[ext_resource type="Script" uid="uid://b8rdijvo1qt0a" path="res://scripts/corrida/estatisticas_corrida.gd" id="4_stats"]
+[ext_resource type="Script" uid="uid://b328133d4n5df" path="res://scripts/ui/hud.gd" id="5_hud"]
+[ext_resource type="Script" uid="uid://3dfv0xvs8jv7" path="res://scripts/pista/pista.gd" id="6_pista"]
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_0vdwr"]
-size = Vector2(1000, 453)
-
-[node name="Track" type="Node2D" unique_id=2083772254]
-script = ExtResource("1_mll3j")
+[node name="Corrida" type="Node2D" unique_id=384909941]
+script = ExtResource("1_corrida")
 car_scene = ExtResource("2_ht2i1")
 
-[node name="Walls" type="StaticBody2D" parent="." unique_id=1861175392 groups=["paredes"]]
+[node name="Pista" type="Node2D" parent="." unique_id=1872404368]
+script = ExtResource("6_pista")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Walls" unique_id=1331457895]
-shape = SubResource("RectangleShape2D_0vdwr")
-
-[node name="Camera2D" type="Camera2D" parent="." unique_id=1959227721]
+[node name="Camera2D" type="Camera2D" parent="." unique_id=1824097061]
 script = ExtResource("3_cam")
 
-[node name="Estatisticas" type="Node" parent="." unique_id=1152033808]
+[node name="Estatisticas" type="Node" parent="." unique_id=547218116]
 script = ExtResource("4_stats")
 
-[node name="HUD" type="CanvasLayer" parent="." unique_id=1749559943]
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1143185496]
 script = ExtResource("5_hud")
