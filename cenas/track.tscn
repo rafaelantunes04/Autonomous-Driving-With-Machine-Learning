@@ -1,28 +1,15 @@
 [gd_scene format=3 uid="uid://c17ds3oqf06ur"]
 
 [ext_resource type="Script" uid="uid://uvm360pmxvlm" path="res://scripts/corrida/corrida.gd" id="1_corrida"]
-[ext_resource type="Texture2D" uid="uid://c4vnh7dlia6gd" path="res://ef32715177c2493390f9b468a5863e77.webp" id="2_ht2i1"]
 [ext_resource type="Script" uid="uid://ujkeyt8tg0kj" path="res://scripts/pista/camara_pista.gd" id="3_cam"]
 [ext_resource type="Script" uid="uid://b328133d4n5df" path="res://scripts/ui/hud.gd" id="5_hud"]
 [ext_resource type="Script" uid="uid://3dfv0xvs8jv7" path="res://scripts/pista/pista.gd" id="6_pista"]
 
-[sub_resource type="Curve2D" id="Curve2D_ht2i1"]
-_data = {
-"points": PackedVector2Array(0, 0, 0, 0, -360, 536, 0, 0, 0, 0, -1432, 536, 0, 0, 0, 0, -1496, 480, 0, 0, 0, 0, -1404, 332, 0, 0, 0, 0, -1332, 140, 0, 0, 0, 0, -1292, -12, 0, 0, 0, 0, -1160, -180, 0, 0, 0, 0, -656, -212, 0, 0, 0, 0, -616, -128, 0, 0, 0, 0, -696, -28, 0, 0, 0, 0, -1068, 56, 0, 0, 0, 0, -1124, 148, 0, 0, 0, 0, -1080, 236, 0, 0, 0, 0, -980, 252, 0, 0, 0, 0, -376, 108, 0, 0, 0, 0, 860, 416, 0, 0, 0, 0, 960, 360, 0, 0, 0, 0, 936, 172, 0, 0, 0, 0, 844, 96, 0, 0, 0, 0, 36, -104, 0, 0, 0, 0, -64, -176, 0, 0, 0, 0, -64, -308, 0, 0, 0, 0, 252, -512, 0, 0, 0, 0, 352, -512, 0, 0, 0, 0, 584, -388, 0, 0, 0, 0, 636, -428, 0, 0, 0, 0, 620, -516, 0, 0, 0, 0, 740, -540, 0, 0, 0, 0, 936, -364, 0, 0, 0, 0, 976, -112, 0, 0, 0, 0, 1068, -40, 0, 0, 0, 0, 1228, -48, 0, 0, 0, 0, 1376, -8, 0, 0, 0, 0, 1472, 108, 0, 0, 0, 0, 1472, 324, 0, 0, 0, 0, 1356, 468, 0, 0, 0, 0, 1224, 532, 0, 0, 0, 0, -308, 536)
-}
-point_count = 38
-
 [node name="Corrida" type="Node2D" unique_id=384909941]
 script = ExtResource("1_corrida")
 
-[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1563017960]
-texture = ExtResource("2_ht2i1")
-
 [node name="Pista" type="Node2D" parent="." unique_id=1872404368]
 script = ExtResource("6_pista")
-
-[node name="Path2D" type="Path2D" parent="Pista" unique_id=561846157]
-curve = SubResource("Curve2D_ht2i1")
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=1824097061]
 script = ExtResource("3_cam")

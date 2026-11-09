@@ -12,6 +12,8 @@ const INTERVALO_BAKE := 2.0           # px entre pontos da curva «cozida» (pre
 const TENSAO_SPLINE := 0.33           # comprimento dos handles / distância ao vizinho
 const PASSO_CURVATURA := 3            # raio de curvatura medido entre pontos i-3, i, i+3
 const MARGEM_PROXIMIDADE := 20.0      # px acima da largura, entre troços distantes
+const FRACAO_CANTO := 0.5             # cantos de uma poligonal: corte máx. como fração do troço mais curto
+const CORTE_CANTO_MAX := 200.0        # px, corte máx. de cada canto (retas longas ficam retas)
 
 
 ## Fecha a curva se o último ponto não coincidir com o primeiro. Não altera a original.
@@ -44,8 +46,9 @@ static func curva_suave(pts: Array[Vector2]) -> Curve2D:
 
 
 ## Se a curva é uma poligonal (nenhum ponto tem handles, como um Path2D desenhado só
-## com cliques), devolve uma versão suavizada que passa pelos mesmos pontos. Se já
-## tem handles, devolve-a tal como está. Não altera a original.
+## com cliques), devolve uma versão com os cantos arredondados: os troços ficam RETOS
+## e só os cantos são suavizados (ver arredondar_cantos). Se já tem handles, devolve-a
+## tal como está. Não altera a original.
 static func suavizar_poligonal(curva: Curve2D) -> Curve2D:
 	var n := curva.point_count
 	if n < 3:
@@ -60,7 +63,41 @@ static func suavizar_poligonal(curva: Curve2D) -> Curve2D:
 		pts.remove_at(n - 1)
 	if pts.size() < 3:
 		return curva
-	return curva_suave(pts)
+	return arredondar_cantos(pts)
+
+
+## Poligonal fechada com os cantos arredondados por curvas de Bézier quadráticas.
+## Em cada vértice corta-se uma distância `corte` para trás e para a frente (no máximo
+## FRACAO_CANTO do troço mais curto e CORTE_CANTO_MAX) e liga-se com uma curva cujo
+## ponto de controlo é o próprio vértice. Entre cantos a pista é uma reta, por isso
+## não há «barrigas» nas retas longas como acontecia com a spline que passa por todos
+## os pontos (curva_suave). Vértices quase alinhados ficam como estão. O último ponto
+## repete o primeiro.
+static func arredondar_cantos(pts: Array[Vector2]) -> Curve2D:
+	var n := pts.size()
+	var curva := Curve2D.new()
+	for i in n:
+		var p := pts[i]
+		var antes := p - pts[(i - 1 + n) % n]
+		var depois := pts[(i + 1) % n] - p
+		var comp_antes := antes.length()
+		var comp_depois := depois.length()
+		if comp_antes < 0.001 or comp_depois < 0.001:
+			continue   # pontos repetidos
+		var u1 := antes / comp_antes
+		var u2 := depois / comp_depois
+		if u1.dot(u2) > 0.9998:
+			curva.add_point(p)   # praticamente em linha reta
+			continue
+		var corte := minf(minf(comp_antes, comp_depois) * FRACAO_CANTO, CORTE_CANTO_MAX)
+		var a := p - u1 * corte
+		var b := p + u2 * corte
+		# Bézier quadrática (a, p, b) escrita como cúbica: handles a 2/3 do ponto de controlo
+		curva.add_point(a, Vector2.ZERO, (p - a) * (2.0 / 3.0))
+		curva.add_point(b, (p - b) * (2.0 / 3.0), Vector2.ZERO)
+	if curva.point_count > 0:
+		curva.add_point(curva.get_point_position(0))
+	return curva
 
 
 ## Amostra a curva (fechada) em pontos IGUALMENTE espaçados ao longo do percurso: a
