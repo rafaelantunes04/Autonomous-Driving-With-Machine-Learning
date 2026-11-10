@@ -62,6 +62,32 @@ var estado_velocidade_kmh: float = 0.0   ## na direção da frente; negativo = m
 var estado_angulo_rodas: float = 0.0     ## graus; positivo = direita
 var estado_rumo: float = 0.0             ## graus, 0 a 360 (0 = +X)
 
+@onready var _sensor_front := get_node_or_null("Front_Sensor") as RayCast2D
+@onready var _sensor_right := get_node_or_null("Right_Sensor") as RayCast2D
+@onready var _sensor_right_2 := get_node_or_null("Right_Sensor_2") as RayCast2D
+@onready var _sensor_left := get_node_or_null("Left_Sensor") as RayCast2D
+@onready var _sensor_left_2 := get_node_or_null("Left_Sensor_2") as RayCast2D
+
+## Distância normalizada: 0 junto à parede, 1 sem parede ao alcance.
+var estado_sensor_front: float:
+	get: return _ler_sensor(_sensor_front)
+var estado_sensor_right: float:
+	get: return _ler_sensor(_sensor_right)
+var estado_sensor_right_2: float:
+	get: return _ler_sensor(_sensor_right_2)
+var estado_sensor_left: float:
+	get: return _ler_sensor(_sensor_left)
+var estado_sensor_left_2: float:
+	get: return _ler_sensor(_sensor_left_2)
+
+
+func _ler_sensor(sensor: RayCast2D) -> float:
+	if sensor == null or not sensor.is_colliding():
+		return 1.0
+	var alcance := sensor.global_position.distance_to(sensor.to_global(sensor.target_position))
+	var distancia := sensor.global_position.distance_to(sensor.get_collision_point())
+	return clampf(distancia / maxf(alcance, 0.001), 0.0, 1.0)
+
 
 func _physics_process(delta: float) -> void:
 	if controlo_manual:

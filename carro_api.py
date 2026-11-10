@@ -85,6 +85,27 @@ class CarroAPI:
         """Ângulo das rodas da frente, em graus (positivo = rodas à direita)."""
         return self._ler("estado_angulo_rodas")
 
+    # Distância normalizada. 1 indica que não há parede ao alcance.
+    @property
+    def sensor_front(self):
+        return self._ler("estado_sensor_front")
+
+    @property
+    def sensor_right(self):
+        return self._ler("estado_sensor_right")
+
+    @property
+    def sensor_right_2(self):
+        return self._ler("estado_sensor_right_2")
+
+    @property
+    def sensor_left(self):
+        return self._ler("estado_sensor_left")
+
+    @property
+    def sensor_left_2(self):
+        return self._ler("estado_sensor_left_2")
+
     # ------------------------------------------------------------ interno
 
     def _escrever(self, propriedade, valor):

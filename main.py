@@ -9,9 +9,8 @@ from py4godot.classes.Node import Node
 
 from carro_api import CarroAPI
 
-# Instantes (em segundos) do programa de demonstração
-FIM_ACELERAR = 1.0
-FIM_RECUAR = 3.5
+# Força usada pelo controlador de teste
+FORCA_ACELERACAO = 0.8
 INTERVALO_PRINT = 1.0
 
 
@@ -27,15 +26,10 @@ class main(Node):
         print("[main] pronto")
 
     def _physics_process(self, delta: float) -> None:
-        """Chamado a cada tick de física: decide os comandos e mostra o estado."""
+        """Controlador de teste contínuo para o carro conseguir correr."""
         self.tempo += delta
 
-        if self.tempo < FIM_ACELERAR:
-            self.carro.acelerar(1.0)    # pedal a fundo para a frente
-        elif self.tempo < FIM_RECUAR:
-            self.carro.recuar(1.0)      # trava, engata e recua
-        else:
-            self.carro.largar_pedal()
+        self.carro.acelerar(FORCA_ACELERACAO)
         self.carro.virar(0.0)
 
         if self.tempo >= self.proximo_print:

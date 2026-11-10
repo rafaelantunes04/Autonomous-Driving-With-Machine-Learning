@@ -2,6 +2,15 @@
 extends CanvasLayer
 class_name HudCorrida
 
+signal continuar_clicado
+
+## Mostra rumo, ângulo das rodas e sensores do Carro 1 no placar.
+@export var mostrar_telemetria: bool = false
+
+# ============================================================
+# CONSTANTES E SINAIS
+# ============================================================
+
 const NOMES = [
     "Carro 1",
     "Carro 2",
@@ -14,12 +23,20 @@ const CORES = [
     Color(0.20, 0.83, 0.49)
 ]
 
+# ============================================================
+# ESTADO DA CORRIDA
+# ============================================================
+
 var _carros: Array[Carro] = []
 var _estatisticas: Array[EstatisticasCorrida] = []
 
 var _total_voltas: int = 5
 var _tempo_limite: float = 270.0
-var _total_corridas: int = 10
+var _total_corridas: int = 5
+
+# ============================================================
+# REFERÊNCIAS DA INTERFACE
+# ============================================================
 
 var _container_carros: VBoxContainer
 var _melhor_geral: Label
@@ -28,9 +45,24 @@ var _cronometro: Label
 var _tempo_decorrido: float = 0.0
 var _cronometro_ativo: bool = true
 var _regras: Label
+var _telemetria: Label
+
+var _overlay_resultado: CenterContainer
+var _painel_resultado: PanelContainer
+var _titulo_resultado: Label
+var _detalhe_resultado: Label
+var _resumo_resultado: Label
+var _botao_continuar: Button
+
+var _velocidades_maximas: Array[float] = []
+var _velocidade_maxima_corrida: float = 0.0
 
 var _linhas: Array[Dictionary] = []
 
+
+# ============================================================
+# CONFIGURAÇÃO DA CORRIDA
+# ============================================================
 
 func _ready() -> void:
     _criar_interface()
@@ -41,7 +73,7 @@ func configurar_corrida(
     estatisticas: Array[EstatisticasCorrida],
     total_voltas: int,
     tempo_limite: float = 270.0,
-    total_corridas: int = 10
+    total_corridas: int = 5
 ) -> void:
     _carros = carros
     _estatisticas = estatisticas
@@ -62,6 +94,102 @@ func configurar_corrida(
     for i in range(_carros.size()):
         _criar_linha_carro(i)
 
+    _reiniciar_velocidades()
+
+
+func atualizar_numero_corrida(numero: int) -> void:
+    if _cabecalho_corrida != null:
+        _cabecalho_corrida.text = "%02d/%02d" % [numero, _total_corridas]
+
+
+# ============================================================
+# PAINEL FINAL
+# ============================================================
+
+func mostrar_vitoria(
+    nome_carro: String,
+    numero_corrida: int,
+    estatisticas: Array[EstatisticasCorrida],
+    tempo_corrida: float
+) -> void:
+    if _detalhe_resultado == null:
+        return
+
+    _titulo_resultado.text = "VITÓRIA!"
+    _detalhe_resultado.text = "%s venceu a corrida %d." % [
+        nome_carro,
+        numero_corrida
+    ]
+
+    var melhor_corrida := INF
+    for stats in estatisticas:
+        if stats.melhor_volta >= 0.0:
+            melhor_corrida = minf(melhor_corrida, stats.melhor_volta)
+
+    var ordem: Array[int] = []
+    for i in range(estatisticas.size()):
+        ordem.append(i)
+
+    ordem.sort_custom(
+        func(a: int, b: int) -> bool:
+            if estatisticas[a].voltas != estatisticas[b].voltas:
+                return estatisticas[a].voltas > estatisticas[b].voltas
+
+            var melhor_a := estatisticas[a].melhor_volta
+            var melhor_b := estatisticas[b].melhor_volta
+
+            if melhor_a < 0.0:
+                return false
+            if melhor_b < 0.0:
+                return true
+            if melhor_a == melhor_b:
+                return a < b
+            return melhor_a < melhor_b
+    )
+
+    var resumo := "Tempo da corrida: %s\n" % _formatar_tempo(tempo_corrida)
+    resumo += "Melhor volta da corrida: %s\n\n" % _formatar_tempo(melhor_corrida)
+    resumo += "Velocidade máxima da corrida: %.0f km/h\n\n" % _velocidade_maxima_corrida
+    resumo += "CLASSIFICAÇÃO FINAL\n"
+
+    for posicao in range(ordem.size()):
+        var indice := ordem[posicao]
+        var melhor := _formatar_tempo(estatisticas[indice].melhor_volta)
+        resumo += "%d.º %s  |  Melhor: %s  |  Máx: %.0f  |  Batidas: %d\n" % [
+            posicao + 1,
+            NOMES[indice % NOMES.size()],
+            melhor,
+            _velocidades_maximas[indice],
+            estatisticas[indice].batidas
+        ]
+
+    _resumo_resultado.text = resumo
+    _botao_continuar.show()
+    _overlay_resultado.show()
+
+
+func ocultar_resultado() -> void:
+    if _overlay_resultado != null:
+        _overlay_resultado.hide()
+
+
+func mostrar_painel_resultado(
+    titulo: String,
+    detalhe: String,
+    resumo: String,
+    teste_final: bool
+) -> void:
+    _titulo_resultado.text = titulo
+    _detalhe_resultado.text = detalhe
+    _resumo_resultado.text = resumo
+    _botao_continuar.text = "FECHAR TESTE" if teste_final else "CONTINUAR PARA A PRÓXIMA CORRIDA"
+    _botao_continuar.show()
+    _overlay_resultado.show()
+
+
+# ============================================================
+# CONSTRUÇÃO DA INTERFACE
+# ============================================================
 
 func _novo_label(
     texto: String,
@@ -118,7 +246,7 @@ func _criar_interface() -> void:
     cabecalho.add_child(titulo)
 
     _cabecalho_corrida = _novo_label(
-        "01/10",
+        "01/05",
         15,
         Color(0.65, 0.80, 1.0)
     )
@@ -164,6 +292,75 @@ func _criar_interface() -> void:
     )
     principal.add_child(_melhor_geral)
 
+    if mostrar_telemetria:
+        principal.add_child(HSeparator.new())
+        _telemetria = _novo_label("", 12, Color(0.75, 0.79, 0.85))
+        principal.add_child(_telemetria)
+
+    _criar_painel_resultado()
+
+
+func _criar_painel_resultado() -> void:
+    _overlay_resultado = CenterContainer.new()
+    _overlay_resultado.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    add_child(_overlay_resultado)
+
+    _painel_resultado = PanelContainer.new()
+    _painel_resultado.custom_minimum_size = Vector2(520, 320)
+    _painel_resultado.add_theme_stylebox_override(
+        "panel",
+        _estilo(Color(0.055, 0.075, 0.11, 0.97), 14)
+    )
+    _overlay_resultado.add_child(_painel_resultado)
+
+    var coluna := VBoxContainer.new()
+    coluna.add_theme_constant_override("separation", 10)
+    _painel_resultado.add_child(coluna)
+
+    _titulo_resultado = _novo_label(
+        "VITÓRIA!",
+        28,
+        Color(1.0, 0.82, 0.20)
+    )
+    _titulo_resultado.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    coluna.add_child(_titulo_resultado)
+
+    _detalhe_resultado = _novo_label(
+        "",
+        18,
+        Color.WHITE
+    )
+    _detalhe_resultado.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    coluna.add_child(_detalhe_resultado)
+
+    _resumo_resultado = _novo_label(
+        "",
+        14,
+        Color(0.85, 0.88, 0.93)
+    )
+    _resumo_resultado.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    coluna.add_child(_resumo_resultado)
+
+    var proxima := _novo_label(
+        "",
+        13,
+        Color(0.65, 0.69, 0.75)
+    )
+    proxima.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    coluna.add_child(proxima)
+
+    _botao_continuar = Button.new()
+    _botao_continuar.text = "CONTINUAR PARA A PRÓXIMA CORRIDA"
+    _botao_continuar.custom_minimum_size = Vector2(0, 42)
+    _botao_continuar.pressed.connect(func() -> void:
+        _botao_continuar.hide()
+        continuar_clicado.emit()
+    )
+    coluna.add_child(_botao_continuar)
+
+    _overlay_resultado.hide()
+    _botao_continuar.hide()
+
 
 func _criar_linha_carro(i: int) -> void:
     var painel := PanelContainer.new()
@@ -208,7 +405,7 @@ func _criar_linha_carro(i: int) -> void:
     coluna.add_child(nome)
 
     var progresso := _novo_label(
-        "Volta 1/5  |  Batidas 0",
+        "Volta 1/%d  |  Batidas 0" % _total_voltas,
         12,
         Color(0.75, 0.79, 0.85)
     )
@@ -228,18 +425,43 @@ func _criar_linha_carro(i: int) -> void:
     )
     coluna.add_child(melhor)
 
+    var velocidade := _novo_label(
+        "Velocidade: 0 km/h",
+        12,
+        Color(0.55, 0.85, 1.0)
+    )
+    coluna.add_child(velocidade)
+
     _linhas.append({
         "painel": painel,
         "posicao": posicao,
         "progresso": progresso,
         "ultima": ultima,
-        "melhor": melhor
+        "melhor": melhor,
+        "velocidade": velocidade
     })
 
+
+# ============================================================
+# ATUALIZAÇÃO DURANTE A CORRIDA
+# ============================================================
 
 func _process(_delta: float) -> void:
     if _carros.is_empty():
         return
+
+    if _telemetria != null:
+        var carro := _carros[0]
+        _telemetria.text = (
+            "TELEMETRIA DO CARRO 1\n"
+            + "Rumo %.0f°  |  Rodas %.0f°\n"
+            + "Sensores (0 perto, 1 longe)\n"
+            + "Frente %.2f\nEsq. %.2f / %.2f  |  Dir. %.2f / %.2f"
+        ) % [
+            carro.estado_rumo, carro.estado_angulo_rodas, carro.estado_sensor_front,
+            carro.estado_sensor_left, carro.estado_sensor_left_2,
+            carro.estado_sensor_right, carro.estado_sensor_right_2
+        ]
 
     var melhor_tempo := INF
     var melhor_carro := -1
@@ -270,6 +492,17 @@ func _process(_delta: float) -> void:
         linha["melhor"].text = (
             "Melhor: %s" %
             _formatar_tempo(stats.melhor_volta)
+        )
+
+        linha["velocidade"].text = "Velocidade: %.0f km/h" % [
+            _carros[i].velocidade_kmh()
+        ]
+
+        var velocidade := _carros[i].velocidade_kmh()
+        _velocidades_maximas[i] = maxf(_velocidades_maximas[i], velocidade)
+        _velocidade_maxima_corrida = maxf(
+            _velocidade_maxima_corrida,
+            velocidade
         )
 
         if stats.melhor_volta >= 0.0:
@@ -318,6 +551,10 @@ func _process(_delta: float) -> void:
         _melhor_geral.text = "Aguardando primeira volta..."
 
 
+# ============================================================
+# CRONÓMETRO E RESULTADO FINAL
+# ============================================================
+
 func _formatar_tempo(tempo: float) -> String:
     if tempo < 0.0:
         return "--:--.---"
@@ -345,5 +582,23 @@ func reiniciar_cronometro() -> void:
     _tempo_decorrido = 0.0
     _cronometro_ativo = true
 
+    _reiniciar_velocidades()
+
     if _cronometro != null:
         _cronometro.text = "00:00.000"
+
+
+func parar_cronometro() -> void:
+    _cronometro_ativo = false
+
+
+# ============================================================
+# FUNÇÕES AUXILIARES
+# ============================================================
+
+func _reiniciar_velocidades() -> void:
+    _velocidades_maximas.clear()
+    _velocidade_maxima_corrida = 0.0
+
+    for _i in range(_carros.size()):
+        _velocidades_maximas.append(0.0)

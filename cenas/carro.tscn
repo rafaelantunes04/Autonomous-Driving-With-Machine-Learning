@@ -16,3 +16,18 @@ mesh = SubResource("QuadMesh_0vdwr")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_0vdwr")
+
+[node name="Front_Sensor" type="RayCast2D" parent="."]
+target_position = Vector2(150, 0)
+
+[node name="Right_Sensor" type="RayCast2D" parent="."]
+target_position = Vector2(150, 100)
+
+[node name="Right_Sensor_2" type="RayCast2D" parent="."]
+target_position = Vector2(50, 150)
+
+[node name="Left_Sensor_2" type="RayCast2D" parent="."]
+target_position = Vector2(50, -150)
+
+[node name="Left_Sensor" type="RayCast2D" parent="."]
+target_position = Vector2(150, -100)
