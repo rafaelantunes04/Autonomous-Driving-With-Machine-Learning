@@ -215,7 +215,7 @@ func _build() -> void:
 	_garantir_carro()
 	# Informa a pista para as estatísticas de todos os carros
 	for stats in estatisticas_carros:
-		stats.definir_pista(centerline)
+		stats.definir_pista(centerline, self)
 	reiniciar_corrida()
 	queue_redraw()
 	_fit_camera()
@@ -354,6 +354,7 @@ func _adicionar_controlador_python() -> void:
 	var controlador := Node.new()
 	controlador.name = "ControladorPython"
 	controlador.set_script(script)
+	car.controlo_manual = false
 	car.add_child(controlador)
 	print("Script Python adicionado ao carro: ", caminho)
 
@@ -649,7 +650,7 @@ func obter_observacao(indice_carro: int) -> PackedFloat32Array:
 
 	# Seis valores numéricos para a IA
 	obs.append(clampf(
-		veiculo.velocity.dot(veiculo.transform.x) / veiculo.velocidade_max,
+		veiculo.velocity.dot(veiculo.transform.x) / veiculo.config.velocidade_max,
 		-1.0, 1.0
 	))
 

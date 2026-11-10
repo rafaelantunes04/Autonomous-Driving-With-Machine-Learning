@@ -276,11 +276,11 @@ func _observacao(i: int) -> Array:
 	var alvo: Vector2 = loc["alvo"]
 	var alvo_angulo: float = wrapf((alvo.rotated(pista.global_rotation)).angle() - carro.global_rotation, -PI, PI)
 	return [
-		clampf(carro.velocity.dot(carro.transform.x) / maxf(carro.velocidade_max, 1.0), -1.0, 1.0),
+		clampf(carro.velocity.dot(carro.transform.x) / maxf(carro.config.velocidade_max, 1.0), -1.0, 1.0),
 		clampf(float(loc["lateral"]) / maxf(pista.track_width * 0.5, 1.0), -3.0, 3.0),
 		sin(angulo), cos(angulo), sin(alvo_angulo), cos(alvo_angulo),
 		clampf(carro.direcao_rodas / deg_to_rad(30.0), -1.0, 1.0),
-		clampf(carro.velocity.length() / maxf(carro.velocidade_max, 1.0), 0.0, 1.0)
+		clampf(carro.velocity.length() / maxf(carro.config.velocidade_max, 1.0), 0.0, 1.0)
 	]
 
 # Recompensa e condições de fim do episódio
@@ -305,7 +305,7 @@ func _atualizar_recompensas() -> void:
 		elif delta < -comprimento * 0.5:
 			delta += comprimento
 		ultimo_progresso[i] = atual
-		var limite_movimento: float = carro.velocidade_max * FRAMES_POR_ACAO / 60.0 * 1.8
+		var limite_movimento: float = carro.config.velocidade_max * FRAMES_POR_ACAO / 60.0 * 1.8
 		delta = clampf(delta, -limite_movimento, limite_movimento)
 		progresso_total[i] += delta
 		var lateral: float = absf(float(loc["lateral"]))

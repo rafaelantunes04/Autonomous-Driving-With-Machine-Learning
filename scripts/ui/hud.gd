@@ -29,6 +29,8 @@ const CORES = [
 
 var _carros: Array[Carro] = []
 var _estatisticas: Array[EstatisticasCorrida] = []
+var _nomes: Array[String] = []
+var _cores: Array[Color] = []
 
 var _total_voltas: int = 5
 var _tempo_limite: float = 270.0
@@ -73,10 +75,14 @@ func configurar_corrida(
     estatisticas: Array[EstatisticasCorrida],
     total_voltas: int,
     tempo_limite: float = 270.0,
-    total_corridas: int = 5
+    total_corridas: int = 5,
+    nomes: Array[String] = [],
+    cores: Array[Color] = []
 ) -> void:
     _carros = carros
     _estatisticas = estatisticas
+    _nomes.assign(NOMES if nomes.is_empty() else nomes)
+    _cores.assign(CORES if cores.is_empty() else cores)
     _total_voltas = total_voltas
     _tempo_limite = tempo_limite
     _total_corridas = total_corridas
@@ -157,7 +163,7 @@ func mostrar_vitoria(
         var melhor := _formatar_tempo(estatisticas[indice].melhor_volta)
         resumo += "%d.º %s  |  Melhor: %s  |  Máx: %.0f  |  Batidas: %d\n" % [
             posicao + 1,
-            NOMES[indice % NOMES.size()],
+            _nomes[indice % _nomes.size()],
             melhor,
             _velocidades_maximas[indice],
             estatisticas[indice].batidas
@@ -387,7 +393,7 @@ func _criar_linha_carro(i: int) -> void:
 
     # Barra de cor do carro
     var barra := ColorRect.new()
-    barra.color = CORES[i % CORES.size()]
+    barra.color = _cores[i % _cores.size()]
     barra.custom_minimum_size = Vector2(4, 0)
     horizontal.add_child(barra)
 
@@ -398,7 +404,7 @@ func _criar_linha_carro(i: int) -> void:
     horizontal.add_child(coluna)
 
     var nome := _novo_label(
-        NOMES[i % NOMES.size()],
+        _nomes[i % _nomes.size()],
         16,
         Color.WHITE
     )
@@ -495,10 +501,10 @@ func _process(_delta: float) -> void:
         )
 
         linha["velocidade"].text = "Velocidade: %.0f km/h" % [
-            _carros[i].velocidade_kmh()
+            _carros[i].velocidade_kmh
         ]
 
-        var velocidade := _carros[i].velocidade_kmh()
+        var velocidade := _carros[i].velocidade_kmh
         _velocidades_maximas[i] = maxf(_velocidades_maximas[i], velocidade)
         _velocidade_maxima_corrida = maxf(
             _velocidade_maxima_corrida,
@@ -544,7 +550,7 @@ func _process(_delta: float) -> void:
     # Melhor volta entre os tres carros
     if melhor_carro >= 0:
         _melhor_geral.text = "%s - %s" % [
-            NOMES[melhor_carro],
+            _nomes[melhor_carro % _nomes.size()],
             _formatar_tempo(melhor_tempo)
         ]
     else:

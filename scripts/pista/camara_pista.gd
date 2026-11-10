@@ -2,7 +2,7 @@ extends Camera2D
 class_name CamaraPista
 
 ## Tecla C alterna entre a vista geral da pista e seguir o carro.
-## A vista geral é definida pela Track (definir_vista_geral), por isso
+## A vista geral é definida pela Corrida (definir_vista_geral), por isso
 ## acompanha sempre a pista atual e o tamanho da janela.
 
 @export var zoom_seguir: Vector2 = Vector2(1.4, 1.4)
