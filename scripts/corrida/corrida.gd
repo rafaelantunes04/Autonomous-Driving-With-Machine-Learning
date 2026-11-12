@@ -1,16 +1,10 @@
-## Orquestra a corrida: cria os carros (Carro.instanciate), liga o HUD e a
-## câmara a eles, e trata de reiniciar.
-## A geometria da pista vive na Pista (filha desta cena).
-
 extends Node2D
 class_name Corrida
 
 @export_group("Corrida IA")
 
 @export var voltas_para_vencer: int = 5 # voltas para ganhar.
-
 @export var tempo_maximo: float = 270.0 # duração máxima da corrida em segundos
-
 @export var corridas_avaliacao: int = 10 # quantidade de corridas para comparar os modelos
 
 ## Se os carros se empurram uns aos outros. Precisa de partida_sobreposta = false.
@@ -20,36 +14,57 @@ class_name Corrida
 ## false = partem em grelha, ligeiramente desfasados.
 @export var partida_sobreposta: bool = true
 
-@export var pista_aleatoria_por_corrida: bool = true # ainda não usado: uma pista diferente em cada corrida
+## true = cada corrida do campeonato (e cada reset do treino RL) usa uma pista nova.
+@export var pista_aleatoria_por_corrida: bool = true
+
+## Inicia o PPO-MLP ao executar a cena diretamente pelo Godot (precisa do nó
+## PonteRL, da .venv e de modelos/ppo_mlp.zip; se faltar algo, ignora-se).
+@export var iniciar_ppo_automaticamente: bool = true
 
 # Lista de carros participantes da corrida
 var carros: Array[Carro] = []
 
+# Estado do campeonato (usado também pela PonteRL)
+var corrida_ativa: bool = false
+var tempo_corrida: float = 0.0
+var vencedor: int = -1
+var corrida_atual: int = 1
+var pontuacoes: Array[int] = []
+
 @onready var _pista: Pista = $Pista
 @onready var _camera: CamaraPista = $Camera2D
 @onready var _hud: HudCorrida = $HUD
+@onready var _ponte_rl = get_node_or_null("PonteRL")
 
 
 func _ready() -> void:
+	seed(Time.get_ticks_usec())
 	get_viewport().size_changed.connect(_fit_camera)
 	_pista.pista_alterada.connect(_ao_pista_alterada)
+	_hud.continuar_clicado.connect(_iniciar_proxima_corrida)
+
+	if iniciar_ppo_automaticamente and _ponte_rl != null:
+		_ponte_rl.iniciar_piloto_local()
 
 	# Um carro por linha: cor + script que o conduz (ControladorTeclado, ou load("res://main.py"))
-	Carro.instanciate(Carro.criar_config(Color.YELLOW, ControladorTeclado, "Amarelo"))
-	Carro.instanciate(Carro.criar_config(Color(0.95, 0.27, 0.30), _carregar_controlador("res://main.py"), "Vermelho"))
-	Carro.instanciate(Carro.criar_config(Color(0.20, 0.83, 0.49), _carregar_controlador("res://modelo_x.py"), "Verde"))
+	Carro.instanciate(Color.YELLOW, ControladorTeclado, "Amarelo")
+	Carro.instanciate(Color(0.95, 0.27, 0.30), load("res://modelo_x.py"), "Vermelho")
+	Carro.instanciate(Color(0.20, 0.83, 0.49), load("res://corrida_ppo.py"), "Verde")
 
 	_ligar_carros()
 	_ao_pista_alterada()
 
-
-func _carregar_controlador(caminho: String) -> Script:
-	if ResourceLoader.exists(caminho):
-		return load(caminho) as Script
-	return ControladorTeclado
+	# Com o piloto PPO local, a corrida só começa quando o Python pedir o primeiro reset.
+	if _ponte_rl != null and _ponte_rl.piloto_local_ativo():
+		corrida_ativa = false
+		_hud.parar_cronometro()
+		for carro in carros:
+			carro.controlo_manual = false
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _ponte_rl != null and _ponte_rl.piloto_local_ativo():
+		return
 	# R = pista nova com uma seed aleatória
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_R:
 		if _pista.usa_path_manual():
@@ -63,17 +78,49 @@ func _unhandled_input(event: InputEvent) -> void:
 		reiniciar_corrida()
 
 
+func _physics_process(delta: float) -> void:
+	if not corrida_ativa:
+		return
+
+	tempo_corrida += delta
+	if tempo_corrida >= tempo_maximo:
+		print("Tempo limite atingido.")
+		_finalizar_corrida()
+
+
 ## Volta a pôr os carros na partida e põe batidas, tempo e voltas a zero.
 func reiniciar_corrida() -> void:
 	if carros.is_empty():
 		return
 
+	corrida_ativa = true
+	tempo_corrida = 0.0
+	vencedor = -1
+
 	for i in carros.size():
+		carros[i].ativar(true)
 		carros[i].reiniciar(
 			_pista.to_global(_pista.start_position + _deslocamento_partida(i)),
 			_pista.global_rotation + _pista.start_rotation)
 
 	_hud.reiniciar_cronometro()
+	_hud.ocultar_resultado()
+
+
+## Gera uma pista nova já (a pista é reconstruída e os carros voltam à partida
+## antes de a função devolver). Com pista_aleatoria_por_corrida a seed é sorteada.
+func gerar_pista(seed_: int) -> void:
+	if pista_aleatoria_por_corrida:
+		seed_ = randi() % 100000
+	if _pista.usa_path_manual():
+		reiniciar_corrida()   # a pista vem de um Path2D: não há pista nova, só recomeça
+		return
+	_pista.gerar_agora(seed_)
+
+
+func definir_numero_corrida(numero: int) -> void:
+	corrida_atual = numero
+	_hud.atualizar_numero_corrida(corrida_atual)
 
 
 # ------------------------------------------------------------------ Interno
@@ -97,26 +144,20 @@ func _deslocamento_partida(i: int) -> Vector2:
 
 ## Regras da corrida que se aplicam a todos os carros, mais HUD e câmara.
 func _ligar_carros() -> void:
-	if colisao_entre_carros and partida_sobreposta:
-		push_warning("Corrida: com colisao_entre_carros ligado, desliga partida_sobreposta (os carros sobrepostos seriam empurrados).")
-
 	carros.assign(get_tree().get_nodes_in_group(Carro.GRUPO))
-	if carros.is_empty():
-		push_error("Corrida: não há carros. Cria-os no _ready com Carro.instanciate().")
-		return
+	pontuacoes.resize(carros.size())
+	pontuacoes.fill(0)
 
-	var nomes: Array[String] = []
-	var cores: Array[Color] = []
-	var estatisticas: Array[EstatisticasCorrida] = []
+	for i in carros.size():
+		carros[i].permitir_colisao_entre_carros(colisao_entre_carros)
+		carros[i].estatisticas.volta_concluida.connect(_ao_concluir_volta.bind(i))
 
-	for carro in carros:
-		carro.permitir_colisao_entre_carros(colisao_entre_carros)
-		nomes.append(carro.nome_exibicao)
-		cores.append(carro.cor)
-		estatisticas.append(carro.estatisticas)
-
-	_hud.configurar_corrida(carros, estatisticas, voltas_para_vencer,
-			tempo_maximo, corridas_avaliacao, nomes, cores)
+	_hud.configurar_corrida(
+		carros,
+		voltas_para_vencer,
+		tempo_maximo,
+		corridas_avaliacao
+	)
 
 	# A câmara acompanha o primeiro carro
 	_camera.alvo = carros[0]
@@ -133,3 +174,142 @@ func _fit_camera() -> void:
 	rect = rect.grow(_pista.largura)
 	var ratio := get_viewport_rect().size / rect.size
 	_camera.definir_vista_geral(_pista.to_global(rect.get_center()), Vector2.ONE * minf(ratio.x, ratio.y))
+
+
+# ------------------------------------------------------------------ Campeonato
+
+func _ao_concluir_volta(numero: int, _duracao: float, indice_carro: int) -> void:
+	if not corrida_ativa or numero < voltas_para_vencer:
+		return
+	print("Vencedor: %s" % carros[indice_carro].nome)
+	_finalizar_corrida(indice_carro)
+
+
+## Botão "Continuar" do painel de resultado: próxima corrida, ou fecha no fim do teste.
+func _iniciar_proxima_corrida() -> void:
+	if corrida_atual >= corridas_avaliacao:
+		get_tree().quit()
+		return
+
+	corrida_atual += 1
+	_hud.atualizar_numero_corrida(corrida_atual)
+	gerar_pista(_pista.semente)   # reinicia a corrida e esconde o painel
+
+
+func _finalizar_corrida(indice_vencedor: int = -1) -> void:
+	if not corrida_ativa:
+		return
+
+	corrida_ativa = false
+	vencedor = indice_vencedor
+
+	for carro in carros:
+		carro.ativar(false)
+
+	_hud.parar_cronometro()
+
+	# Pontos: 1.º = N, 2.º = N-1, ... (mínimo 1) + 1 ponto pela melhor volta
+	var ordem := _calcular_classificacao()
+	var pontos_corrida: Array[int] = []
+	pontos_corrida.resize(carros.size())
+	pontos_corrida.fill(0)
+	for posicao in ordem.size():
+		pontos_corrida[ordem[posicao]] = maxi(carros.size() - posicao, 1)
+
+	var melhor_carro := _melhor_volta_carro()
+	if melhor_carro >= 0:
+		pontos_corrida[melhor_carro] += 1
+
+	for i in carros.size():
+		pontuacoes[i] += pontos_corrida[i]
+
+	var resumo := "Tempo da corrida: %s\n" % _formatar_tempo(tempo_corrida)
+	if melhor_carro >= 0:
+		resumo += "Melhor volta: %s (+1 ponto)\n" % carros[melhor_carro].nome
+	resumo += "CLASSIFICAÇÃO DA CORRIDA %d/%d\n" % [corrida_atual, corridas_avaliacao]
+
+	for posicao in ordem.size():
+		var indice := ordem[posicao]
+		var stats := carros[indice].estatisticas
+		resumo += "%d.º %s | +%d pontos | Total: %d | Melhor: %s | Batidas: %d\n" % [
+			posicao + 1,
+			carros[indice].nome,
+			pontos_corrida[indice],
+			pontuacoes[indice],
+			_formatar_tempo(stats.melhor_volta),
+			stats.batidas
+		]
+
+	var teste_final := corrida_atual >= corridas_avaliacao
+	if teste_final:
+		var ordem_pontos := _calcular_classificacao_pontos()
+		resumo += "\nCLASSIFICAÇÃO FINAL DO TESTE\n"
+		for posicao in ordem_pontos.size():
+			var indice := ordem_pontos[posicao]
+			resumo += "%d.º %s | %d pontos\n" % [
+				posicao + 1,
+				carros[indice].nome,
+				pontuacoes[indice]
+			]
+
+	_hud.mostrar_painel_resultado(
+		"RESULTADO FINAL" if teste_final else "RESULTADO DA CORRIDA",
+		"Teste concluído" if teste_final else "Corrida %d concluída" % corrida_atual,
+		resumo,
+		teste_final
+	)
+
+
+## Índices dos carros por ordem: mais voltas primeiro, depois melhor volta.
+func _calcular_classificacao() -> Array[int]:
+	var ordem: Array[int] = []
+	for i in carros.size():
+		ordem.append(i)
+
+	ordem.sort_custom(
+		func(a: int, b: int) -> bool:
+			var stats_a := carros[a].estatisticas
+			var stats_b := carros[b].estatisticas
+			if stats_a.voltas != stats_b.voltas:
+				return stats_a.voltas > stats_b.voltas
+			if stats_a.melhor_volta < 0.0:
+				return false
+			if stats_b.melhor_volta < 0.0:
+				return true
+			if stats_a.melhor_volta == stats_b.melhor_volta:
+				return a < b
+			return stats_a.melhor_volta < stats_b.melhor_volta
+	)
+	return ordem
+
+
+## Índices dos carros por ordem de pontos acumulados no campeonato.
+func _calcular_classificacao_pontos() -> Array[int]:
+	var ordem: Array[int] = []
+	for i in carros.size():
+		ordem.append(i)
+
+	ordem.sort_custom(
+		func(a: int, b: int) -> bool:
+			if pontuacoes[a] == pontuacoes[b]:
+				return a < b
+			return pontuacoes[a] > pontuacoes[b]
+	)
+	return ordem
+
+
+func _melhor_volta_carro() -> int:
+	var melhor_tempo := INF
+	var melhor_carro := -1
+	for i in carros.size():
+		var tempo := carros[i].estatisticas.melhor_volta
+		if tempo >= 0.0 and tempo < melhor_tempo:
+			melhor_tempo = tempo
+			melhor_carro = i
+	return melhor_carro
+
+
+func _formatar_tempo(tempo: float) -> String:
+	if tempo < 0.0:
+		return "--:--.---"
+	return "%02d:%06.3f" % [int(tempo / 60.0), fmod(tempo, 60.0)]

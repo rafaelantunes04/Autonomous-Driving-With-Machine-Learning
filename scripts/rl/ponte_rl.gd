@@ -1,12 +1,13 @@
 extends Node
-## Anexe este nó como filho direto de Track.
+## Anexe este nó como filho direto da Corrida (cenas/track.tscn).
 ## Modos: --rl-train para treino, --rl-eval para avaliação e --rl-race para corrida.
 ## O modelo escolhe as ações no Python. A ponte aplica-as e devolve o resultado.
 
 const FRAMES_POR_ACAO: int = 4
 const LIMITE_PASSOS: int = 1600
 
-var pista: Track
+var corrida: Corrida
+var pista: Pista
 var conexao: StreamPeerTCP = StreamPeerTCP.new()
 var buffer: String = ""
 var porta: int = 8765
@@ -31,7 +32,8 @@ var _prazo_piloto_ms := 0
 # Ligação TCP e comandos enviados pelo Python
 
 func _ready() -> void:
-	pista = get_parent() as Track
+	corrida = get_parent() as Corrida
+	pista = corrida.get_node("Pista") as Pista
 	process_priority = 100
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	if "--rl-train" in args:
@@ -110,9 +112,9 @@ func _process(_delta: float) -> void:
 			modo = ""
 			aguardando_frames = 0
 			push_warning("PPO automático: o Python desligou ou não respondeu. A usar as setas.")
-			for carro in pista.carros:
+			for carro in corrida.carros:
 				carro.controlo_manual = true
-			pista.reiniciar_corrida()
+			corrida.reiniciar_corrida()
 			return
 		if _servidor_local.is_connection_available():
 			conexao = _servidor_local.take_connection()
@@ -122,8 +124,8 @@ func _process(_delta: float) -> void:
 	if conexao.get_status() != StreamPeerTCP.STATUS_CONNECTED:
 		return
 	if aguardando_proxima_corrida \
-			and pista.corrida_ativa \
-			and pista.corrida_atual > corrida_aguardada:
+			and corrida.corrida_ativa \
+			and corrida.corrida_atual > corrida_aguardada:
 		aguardando_proxima_corrida = false
 		_preparar_estado_corrida()
 		_enviar(_resposta("aguardar_proxima_corrida"))
@@ -163,7 +165,7 @@ func _receber(msg: Dictionary) -> void:
 			_enviar({"type": "error", "message": "Acoes insuficientes"})
 			return
 		for i in range(quantidade):
-			var carro = pista.carros[i]
+			var carro = corrida.carros[i]
 			var acao: Array = lista[i]
 			if terminado[i]:
 				carro.aplicar_comandos(0.0, 0.0)
@@ -171,8 +173,8 @@ func _receber(msg: Dictionary) -> void:
 				carro.aplicar_comandos(float(acao[0]), float(acao[1]))
 		aguardando_frames = FRAMES_POR_ACAO
 	elif cmd == "aguardar_proxima_corrida":
-		corrida_aguardada = int(msg.get("corrida", pista.corrida_atual))
-		if pista.corrida_ativa and pista.corrida_atual > corrida_aguardada:
+		corrida_aguardada = int(msg.get("corrida", corrida.corrida_atual))
+		if corrida.corrida_ativa and corrida.corrida_atual > corrida_aguardada:
 			_preparar_estado_corrida()
 			_enviar(_resposta("aguardar_proxima_corrida"))
 		else:
@@ -183,9 +185,8 @@ func _receber(msg: Dictionary) -> void:
 # Preparação da corrida e avanço da física por ação
 
 func _reiniciar(seed_: int, corrida_: int = 1) -> void:
-	pista.current_seed = seed_
-	pista.definir_numero_corrida(corrida_)
-	pista.generate(seed_)
+	corrida.definir_numero_corrida(corrida_)
+	corrida.gerar_pista(seed_)
 	_preparar_estado_corrida()
 
 
@@ -197,8 +198,8 @@ func _preparar_estado_corrida() -> void:
 	premios = [0.0, 0.0, 0.0]
 	motivo = ["", "", ""]
 	_calcular_distancias()
-	for i in range(pista.carros.size()):
-		var carro = pista.carros[i]
+	for i in range(corrida.carros.size()):
+		var carro = corrida.carros[i]
 		carro.controlo_manual = false
 		carro.aplicar_comandos(0.0, 0.0)
 		carro.set_physics_process(i == 0 or modo == "eval")
@@ -206,11 +207,11 @@ func _preparar_estado_corrida() -> void:
 			carro.colidiu.connect(_bateu.bind(i))
 		if i < 3:
 			ultimo_progresso[i] = _localizar(carro.global_position)["progresso"]
-	# Durante treino não rodar o relógio/encerramento automático do Track.
+	# Durante treino não rodar o relógio/encerramento automático da Corrida.
 	if modo == "train":
-		pista.set_physics_process(false)
+		corrida.set_physics_process(false)
 	else:
-		pista.set_physics_process(true)
+		corrida.set_physics_process(true)
 
 func _bateu(_colisor: Node, _velocidade: float, indice: int) -> void:
 	if indice >= 0 and indice < 3:
@@ -269,18 +270,18 @@ func _localizar(pos_global: Vector2) -> Dictionary:
 
 ## A ordem destes oito valores faz parte da interface com o modelo treinado.
 func _observacao(i: int) -> Array:
-	var carro = pista.carros[i]
+	var carro = corrida.carros[i]
 	var loc: Dictionary = _localizar(carro.global_position)
 	var tangente: Vector2 = loc["tangente"]
 	var angulo: float = wrapf(carro.global_rotation - (tangente.rotated(pista.global_rotation)).angle(), -PI, PI)
 	var alvo: Vector2 = loc["alvo"]
 	var alvo_angulo: float = wrapf((alvo.rotated(pista.global_rotation)).angle() - carro.global_rotation, -PI, PI)
 	return [
-		clampf(carro.velocity.dot(carro.transform.x) / maxf(carro.config.velocidade_max, 1.0), -1.0, 1.0),
-		clampf(float(loc["lateral"]) / maxf(pista.track_width * 0.5, 1.0), -3.0, 3.0),
+		clampf(carro.velocity.dot(carro.transform.x) / maxf(carro.velocidade_max, 1.0), -1.0, 1.0),
+		clampf(float(loc["lateral"]) / maxf(pista.largura * 0.5, 1.0), -3.0, 3.0),
 		sin(angulo), cos(angulo), sin(alvo_angulo), cos(alvo_angulo),
 		clampf(carro.direcao_rodas / deg_to_rad(30.0), -1.0, 1.0),
-		clampf(carro.velocity.length() / maxf(carro.config.velocidade_max, 1.0), 0.0, 1.0)
+		clampf(carro.velocity.length() / maxf(carro.velocidade_max, 1.0), 0.0, 1.0)
 	]
 
 # Recompensa e condições de fim do episódio
@@ -291,12 +292,12 @@ func _atualizar_recompensas() -> void:
 		if terminado[i]:
 			premios[i] = 0.0
 			continue
-		if modo == "race" and not pista.corrida_ativa:
+		if modo == "race" and not corrida.corrida_ativa:
 			terminado[i] = true
 			motivo[i] = "vitoria"
 			premios[i] = 0.0
 			continue
-		var carro = pista.carros[i]
+		var carro = corrida.carros[i]
 		var loc: Dictionary = _localizar(carro.global_position)
 		var atual: float = loc["progresso"]
 		var delta: float = atual - ultimo_progresso[i]
@@ -305,18 +306,18 @@ func _atualizar_recompensas() -> void:
 		elif delta < -comprimento * 0.5:
 			delta += comprimento
 		ultimo_progresso[i] = atual
-		var limite_movimento: float = carro.config.velocidade_max * FRAMES_POR_ACAO / 60.0 * 1.8
+		var limite_movimento: float = carro.velocidade_max * FRAMES_POR_ACAO / 60.0 * 1.8
 		delta = clampf(delta, -limite_movimento, limite_movimento)
 		progresso_total[i] += delta
 		var lateral: float = absf(float(loc["lateral"]))
-		premios[i] = clampf(delta / 35.0, -2.0, 2.0) - 0.01 - 0.02 * lateral / maxf(pista.track_width * 0.5, 1.0)
+		premios[i] = clampf(delta / 35.0, -2.0, 2.0) - 0.01 - 0.02 * lateral / maxf(pista.largura * 0.5, 1.0)
 		if modo == "race":
 			continue
 		if colisoes[i] > 0:
 			premios[i] -= 5.0
 			terminado[i] = true
 			motivo[i] = "batida"
-		elif lateral > pista.track_width * 0.52:
+		elif lateral > pista.largura * 0.52:
 			premios[i] -= 8.0
 			terminado[i] = true
 			motivo[i] = "fora_da_pista"
@@ -346,7 +347,7 @@ func _resposta(tipo: String) -> Dictionary:
 			obs.append(_observacao(i))
 		rewards.append(premios[i])
 		dones.append(terminado[i])
-		infos.append({"progresso": progresso_total[i], "comprimento": comprimento, "batidas": colisoes[i], "motivo": motivo[i], "passos": passos, "seed": pista.current_seed})
+		infos.append({"progresso": progresso_total[i], "comprimento": comprimento, "batidas": colisoes[i], "motivo": motivo[i], "passos": passos, "seed": pista.semente})
 	return {"type": tipo, "observations": obs, "rewards": rewards, "dones": dones, "infos": infos}
 
 func _enviar(obj: Dictionary) -> void:

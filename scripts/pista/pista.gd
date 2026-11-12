@@ -85,6 +85,17 @@ func gerar(seed_: int) -> void:
 	semente = seed_
 
 
+## Como gerar(), mas reconstrói logo, sem esperar pelo fim do frame. Usado pela
+## ponte RL, que precisa da linha central nova antes de responder ao Python.
+func gerar_agora(seed_: int) -> void:
+	if _modo_manual:
+		return
+	_reconstrucao_pendente = true   # o setter de `semente` não agenda outra reconstrução
+	semente = seed_
+	_reconstrucao_pendente = false
+	reconstruir()
+
+
 ## Reconstrói linha central, bordas, paredes e desenho a partir do Path2D (ou do gerador).
 func reconstruir() -> void:
 	var fonte := _encontrar_path()

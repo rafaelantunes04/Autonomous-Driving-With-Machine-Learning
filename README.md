@@ -1,14 +1,5 @@
 # Condução Autónoma com Machine Learning
 
-A cena principal, `cenas/track.tscn`, abre o campeonato do PPO com F5 quando a
-`.venv` e o modelo `modelos/ppo_mlp.zip` estão disponíveis. Os comandos de
-treino e corrida também usam esta cena por omissão. Para instalar as dependências
-na `.venv`, usa `python -m pip install -r requirements.txt`.
-
-As instruções sobre `Corrida`, `Pista` e `CarroConfig` abaixo descrevem a cena
-`cenas/corrida_rafael.tscn`. Abre essa cena e executa-a com F6 para testar
-essa estrutura. O traçado de Estoril está em `cenas/pista_estoril.tscn`.
-
 Simulador 2D de corridas feito em **Godot**, onde o carro pode ser controlado **à mão (setas / WASD)** ou por um **script Python** (através do addon [py4godot](https://github.com/niklas2902/py4godot)). A pista é gerada aleatoriamente e o objetivo é escrever em Python a "inteligência" que conduz o carro.
 
 ---
