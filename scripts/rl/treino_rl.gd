@@ -82,7 +82,7 @@ func avaliar() -> void:
 
 	# Recompensa: avançar na pista (menos distância até ao fim) + um pouco de velocidade.
 	# Não há termo de centragem: a rede aprende a evitar paredes só pela penalização da batida.
-	recompensa = delta / 35.0 + 0.02 * v_frente
+	recompensa = delta / 25.0 + 0.02 * v_frente
 
 	if batidas > 0:
 		recompensa -= 5.0
