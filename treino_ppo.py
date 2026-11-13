@@ -9,6 +9,7 @@ estão em scripts/rl/treino_rl.gd.
 Escolhe-se o modelo e a duração com variáveis de ambiente:
     TREINO_MODELO = ppo_mlp (por omissão) | ppo_lstm | sac_mlp
     TREINO_PASSOS = 100000 (por omissão)
+    TREINO_CONTINUAR = 1 para continuar a partir de modelos/ppo_mlp.json (por omissão 0 = do zero)
 
 No fim guarda os pesos em modelos/<modelo>.json (é o que o corrida_ppo.py lê)
 e fecha o jogo. Só o ppo_mlp tem este formato; o ppo_lstm e o sac_mlp, que não
@@ -20,6 +21,7 @@ IMPORTANTE: o nome da classe tem de ser igual ao nome do ficheiro.
 import json
 import os
 import queue
+import shutil
 import threading
 import traceback
 
@@ -46,11 +48,8 @@ def _pasta_projeto():
 	return candidatas[0]
 
 
-def pesos_ppo_mlp(modelo):
-	"""Pesos do ator de um PPO-MLP do SB3, como lista de camadas [{w, b, ativacao}].
-
-	Percorre policy_net (Linear + Tanh, ...) e depois o action_net (linear).
-	"""
+def _camadas(sequencia, final):
+	"""Lista de camadas [{w, b, ativacao}] de uma Sequential (Linear/Tanh) mais a camada final linear."""
 	def linear(m, ativacao):
 		return {
 			"w": m.weight.detach().cpu().numpy().astype("float64").tolist(),   # (saida, entrada)
@@ -59,16 +58,61 @@ def pesos_ppo_mlp(modelo):
 		}
 
 	camadas = []
-	for m in modelo.policy.mlp_extractor.policy_net:
+	for m in sequencia:
 		tipo = type(m).__name__
 		if tipo == "Linear":
 			camadas.append(linear(m, "linear"))
 		elif tipo == "Tanh" and camadas:
 			camadas[-1]["ativacao"] = "tanh"
 		else:
-			raise ValueError("Camada %s não suportada pelo corrida_ppo.py" % tipo)
-	camadas.append(linear(modelo.policy.action_net, "linear"))
+			raise ValueError("Camada %s não suportada" % tipo)
+	camadas.append(linear(final, "linear"))
 	return camadas
+
+
+def pesos_ppo_mlp(modelo):
+	"""Pesos do ator de um PPO-MLP do SB3 (é o que o corrida_ppo.py usa)."""
+	return _camadas(modelo.policy.mlp_extractor.policy_net, modelo.policy.action_net)
+
+
+def estado_ppo_mlp(modelo):
+	"""Tudo o que é preciso para continuar o treino: ator, crítico e log_std.
+
+	O corrida_ppo.py só lê "camadas"; o resto é ignorado a conduzir.
+	"""
+	pol = modelo.policy
+	return {
+		"camadas": _camadas(pol.mlp_extractor.policy_net, pol.action_net),
+		"critico": _camadas(pol.mlp_extractor.value_net, pol.value_net),
+		"log_std": pol.log_std.detach().cpu().numpy().astype("float64").tolist(),
+	}
+
+
+def carregar_estado(modelo, dados):
+	"""Põe os pesos guardados num PPO-MLP novo (o inverso de estado_ppo_mlp)."""
+	import torch
+
+	def preencher(modulos, camadas, nome):
+		if len(modulos) != len(camadas):
+			raise ValueError("%s: o ficheiro tem %d camadas e o modelo %d" % (nome, len(camadas), len(modulos)))
+		for m, c in zip(modulos, camadas):
+			w = torch.tensor(c["w"], dtype=m.weight.dtype)
+			if tuple(w.shape) != tuple(m.weight.shape):
+				raise ValueError("%s: forma %s no ficheiro, %s no modelo" % (nome, tuple(w.shape), tuple(m.weight.shape)))
+			with torch.no_grad():
+				m.weight.copy_(w)
+				m.bias.copy_(torch.tensor(c["b"], dtype=m.bias.dtype))
+
+	pol = modelo.policy
+	linear = lambda seq: [m for m in seq if type(m).__name__ == "Linear"]
+	preencher(linear(pol.mlp_extractor.policy_net) + [pol.action_net], dados["camadas"], "ator")
+	if "critico" in dados:
+		preencher(linear(pol.mlp_extractor.value_net) + [pol.value_net], dados["critico"], "crítico")
+	else:
+		print("[treino_ppo] o ficheiro só tem o ator: o crítico e o log_std começam de novo", flush=True)
+	if "log_std" in dados:
+		with torch.no_grad():
+			pol.log_std.copy_(torch.tensor(dados["log_std"], dtype=pol.log_std.dtype))
 
 
 def treinar(env, nome_modelo, passos, pasta):
@@ -103,12 +147,23 @@ def treinar(env, nome_modelo, passos, pasta):
 
 	modelo = cls(politica, env, **kwargs)
 	destino = os.path.join(pasta, "modelos", nome_modelo)
+	continuar = os.environ.get("TREINO_CONTINUAR", "0") == "1"
+	if continuar:
+		if nome_modelo != "ppo_mlp":
+			raise ValueError("TREINO_CONTINUAR só funciona com o ppo_mlp")
+		if not os.path.isfile(destino + ".json"):
+			raise FileNotFoundError("Não há %s.json para continuar" % destino)
+		with open(destino + ".json", encoding="utf-8") as f:
+			carregar_estado(modelo, json.load(f))
+		print("[treino_ppo] a continuar a partir de", destino + ".json", flush=True)
 	try:
 		modelo.learn(total_timesteps=passos, progress_bar=False)
 	finally:
 		if nome_modelo == "ppo_mlp":
+			if os.path.isfile(destino + ".json") and not continuar:
+				shutil.copyfile(destino + ".json", destino + ".anterior.json")   # não perder o modelo antigo
 			with open(destino + ".json", "w", encoding="utf-8") as f:
-				json.dump({"camadas": pesos_ppo_mlp(modelo)}, f)
+				json.dump(estado_ppo_mlp(modelo), f)
 			print("[treino_ppo] pesos guardados:", destino + ".json", flush=True)
 		else:
 			modelo.save(destino)

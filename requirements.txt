@@ -1,5 +1,3 @@
-# Só para TREINAR, e têm de ser instaladas no Python do py4godot (ver README 3.6).
-# Conduzir com o modelo (corrida_ppo.py) não precisa de nada disto.
 numpy>=2.0,<3
 stable-baselines3>=2.7,<3
 sb3-contrib>=2.7,<3

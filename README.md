@@ -18,12 +18,13 @@ pip install tqdm
 python download_addon.py
 ```
 
-Isto descarrega o py4godot e cria a pasta `addons/py4godot/`.
+Isto descarrega o py4godot, cria a pasta `addons/py4godot/` e instala o `requirements.txt` (stable-baselines3, torch, ...) no Python do próprio py4godot, com o pip incluído. Se o addon já existir só faz a parte das dependências, por isso podes voltar a correr o script a qualquer altura.
 
 Opções úteis:
 
 ```bash
 python download_addon.py --force                 # volta a descarregar e substitui
+python download_addon.py --sem-deps              # não instala o requirements.txt (só para conduzir)
 python download_addon.py --url "<url do .zip>"   # usa uma release específica
 ```
 
@@ -144,10 +145,10 @@ As 8 observações são calculadas em GDScript (`scripts/rl/observacao_rl.gd`) e
 
 O treino corre na cena `cenas/treino.tscn`: só há um carro, conduzido por `treino_ppo.py`. O SB3 corre numa thread do Python do py4godot e o jogo faz de simulador (recompensa e fim de episódio em `scripts/rl/treino_rl.gd`).
 
-1. Instala as dependências **no Python do py4godot** (não no do sistema). Procura o executável de Python dentro de `addons/py4godot/` e corre `<esse python> -m pip install -r requirements.txt`.
-2. Escolhe o modelo e a duração com variáveis de ambiente (opcionais): `TREINO_MODELO` = `ppo_mlp` (por omissão), `ppo_lstm` ou `sac_mlp`; `TREINO_PASSOS` = `100000` por omissão.
+1. Instala as dependências no Python do py4godot: `python download_addon.py` já o faz (ou volta a correr se falhou).
+2. Escolhe o modelo e a duração com variáveis de ambiente (opcionais): `TREINO_MODELO` = `ppo_mlp` (por omissão), `ppo_lstm` ou `sac_mlp`; `TREINO_PASSOS` = `100000` por omissão; `TREINO_CONTINUAR` = `1` para continuar a treinar a partir de `modelos/ppo_mlp.json` (só `ppo_mlp`).
 3. Abre `cenas/treino.tscn` e corre-a (F6), ou em linha de comandos: `godot --headless --path . res://cenas/treino.tscn`.
-4. No fim escreve os pesos em `modelos/ppo_mlp.json` (para `ppo_lstm` e `sac_mlp` guarda `modelos/<modelo>.zip` do SB3) e fecha o jogo. O `corrida_ppo.py` passa logo a usar o modelo novo.
+4. No fim escreve os pesos em `modelos/ppo_mlp.json` (para `ppo_lstm` e `sac_mlp` guarda `modelos/<modelo>.zip` do SB3) e fecha o jogo. Um treino do zero guarda antes o modelo anterior em `modelos/ppo_mlp.anterior.json`. O `corrida_ppo.py` passa logo a usar o modelo novo.
 
 A velocidade da simulação é `velocidade_treino` no nó `Corrida` (1 = tempo real; por omissão 20). Os registos ficam em `logs/`.
 
