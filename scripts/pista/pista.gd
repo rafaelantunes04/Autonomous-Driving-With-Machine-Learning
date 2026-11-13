@@ -85,8 +85,7 @@ func gerar(seed_: int) -> void:
 	semente = seed_
 
 
-## Como gerar(), mas reconstrói logo, sem esperar pelo fim do frame. Usado pela
-## ponte RL, que precisa da linha central nova antes de responder ao Python.
+## Como gerar(), mas reconstrói logo, sem esperar pelo fim do frame.
 func gerar_agora(seed_: int) -> void:
 	if _modo_manual:
 		return

@@ -4,7 +4,6 @@
 [ext_resource type="Script" uid="uid://do0tlxrs8r0ho" path="res://scripts/pista/camara_pista.gd" id="3_cam"]
 [ext_resource type="Script" uid="uid://cusw0njgg1k87" path="res://scripts/ui/hud.gd" id="5_hud"]
 [ext_resource type="Script" uid="uid://vjcai0r5qyj1" path="res://scripts/pista/pista.gd" id="6_pista"]
-[ext_resource type="Script" uid="uid://e83pkicburw0" path="res://scripts/rl/ponte_rl.gd" id="7_ponte"]
 
 [node name="Corrida" type="Node2D" unique_id=384909941]
 script = ExtResource("1_corrida")
@@ -17,6 +16,3 @@ script = ExtResource("3_cam")
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1143185496]
 script = ExtResource("5_hud")
-
-[node name="PonteRL" type="Node" parent="." unique_id=79415205]
-script = ExtResource("7_ponte")

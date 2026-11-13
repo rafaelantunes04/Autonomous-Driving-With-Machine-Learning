@@ -101,6 +101,90 @@ var estado_rumo: float:             ## graus, 0 a 360 (0 = +X)
 		return fposmod(rotation_degrees, 360.0)
 
 
+# Observações do modelo PPO (8 valores), calculadas uma vez por tick de física.
+# O Python lê-as com get("estado_obs_0") ... get("estado_obs_7") (ver CarroAPI.observacao).
+var _observacao_rl: ObservacaoRL
+var _obs_cache := PackedFloat32Array()
+var _obs_tick: int = -1
+
+func _obs_helper() -> ObservacaoRL:
+	if _observacao_rl == null:
+		var pista := get_parent().get_node_or_null("Pista") as Pista
+		if pista != null:
+			_observacao_rl = ObservacaoRL.new(pista)
+	return _observacao_rl
+
+func _obs(i: int) -> float:
+	var tick := Engine.get_physics_frames()
+	if tick != _obs_tick:
+		var helper := _obs_helper()
+		if helper == null:
+			return 0.0
+		_obs_tick = tick
+		_obs_cache = helper.calcular(self)
+	return _obs_cache[i] if i < _obs_cache.size() else 0.0
+
+var estado_obs_0: float:
+	get: return _obs(0)
+var estado_obs_1: float:
+	get: return _obs(1)
+var estado_obs_2: float:
+	get: return _obs(2)
+var estado_obs_3: float:
+	get: return _obs(3)
+var estado_obs_4: float:
+	get: return _obs(4)
+var estado_obs_5: float:
+	get: return _obs(5)
+var estado_obs_6: float:
+	get: return _obs(6)
+var estado_obs_7: float:
+	get: return _obs(7)
+
+
+# Treino por reforço (usado por treino_ppo.py via py4godot). Tudo em tipos simples.
+var _treino_rl: TreinoRL
+
+func _treino() -> TreinoRL:
+	if _treino_rl == null:
+		var helper := _obs_helper()
+		if helper != null:
+			_treino_rl = TreinoRL.new(self, get_parent() as Corrida, get_parent().get_node("Pista") as Pista, helper)
+	return _treino_rl
+
+var rl_reset: int = 0:                 ## escrever uma seed = nova pista + recomeçar o episódio
+	set(seed_):
+		var t := _treino()
+		if t != null:
+			t.reiniciar(seed_)
+var rl_avaliar: bool = false:          ## escrever true = fechar o passo (calcula recompensa/fim)
+	set(_v):
+		var t := _treino()
+		if t != null:
+			t.avaliar()
+var rl_congelado: bool = false:        ## true = a física do carro pára (entre ações)
+	set(v):
+		rl_congelado = v
+		set_physics_process(not v)
+var rl_sair: bool = false:             ## escrever true = fecha o jogo
+	set(_v):
+		get_tree().quit()
+var rl_recompensa: float:
+	get: return _treino_rl.recompensa if _treino_rl != null else 0.0
+var rl_terminado: bool:
+	get: return _treino_rl.terminado if _treino_rl != null else false
+var rl_motivo: int:                    ## 0 nenhum, 1 batida, 2 fora da pista, 3 volta, 4 tempo
+	get: return _treino_rl.motivo if _treino_rl != null else 0
+var rl_progresso: float:
+	get: return _treino_rl.progresso_total if _treino_rl != null else 0.0
+var rl_comprimento: float:
+	get: return _treino_rl.comprimento() if _treino_rl != null else 0.0
+var rl_batidas: int:
+	get: return _treino_rl.batidas if _treino_rl != null else 0
+var rl_passos: int:
+	get: return _treino_rl.passos if _treino_rl != null else 0
+
+
 func _ready() -> void:
 	pass
 
@@ -162,8 +246,8 @@ static func instanciate(cor: Color = Color.WHITE, script_controlador: Script = C
 # ------------------------------------------------------------------ API pública
 
 ## true  = o controlador (filho deste carro: teclado, GDScript ou Python) conduz.
-## false = o controlador fica parado e quem manda é código externo (ex.: a
-##         PonteRL do treino PPO), que escreve os comandos com aplicar_comandos().
+## false = o controlador fica parado e quem manda é código externo, que
+##         escreve os comandos com aplicar_comandos().
 var controlo_manual: bool = true:
 	set(valor):
 		controlo_manual = valor

@@ -63,6 +63,11 @@ class CarroAPI:
 		"""Roda o volante. `valor`: -1 (todo à esquerda) a +1 (todo à direita)."""
 		self._escrever("input_dir", _limitar(valor))
 
+	def comando(self, acelerar, virar):
+		"""Pedal e volante de uma vez, ambos em [-1, 1] (negativo no pedal = travar/marcha-atrás)."""
+		self._escrever("input_acel", _limitar(acelerar))
+		self._escrever("input_dir", _limitar(virar))
+
 	def parar(self):
 		"""Larga o pedal e põe o volante a direito."""
 		self.largar_pedal()
@@ -110,6 +115,44 @@ class CarroAPI:
 	def sensor_left_2(self):
 		"""Leitura do Left_Sensor_2 (0.0 a 1.0)."""
 		return self._ler("estado_sensor_left_2")
+
+	@property
+	def observacao(self):
+		"""As 8 observações do modelo PPO (lista de floats), ver scripts/rl/observacao_rl.gd."""
+		return [self._ler("estado_obs_%d" % i) for i in range(8)]
+
+	# --- Treino por reforço (ver scripts/rl/treino_rl.gd) ---
+	MOTIVOS = ("", "batida", "fora_da_pista", "volta", "tempo")
+
+	def rl_reiniciar(self, seed):
+		"""Pista nova e carro na partida, parado e congelado até ao primeiro passo."""
+		self._escrever("rl_reset", int(seed))
+
+	def rl_congelar(self, congelado):
+		"""True pára a física do carro (entre ações); False deixa-a correr."""
+		self._escrever("rl_congelado", bool(congelado))
+
+	def rl_avaliar(self):
+		"""Fecha um passo: calcula a recompensa e se o episódio acabou."""
+		self._escrever("rl_avaliar", True)
+
+	def rl_sair(self):
+		"""Fecha o jogo."""
+		self._escrever("rl_sair", True)
+
+	def rl_resultado(self):
+		"""Observação, recompensa e estado do episódio, num dicionário simples."""
+		motivo = int(self._ler("rl_motivo"))
+		return {
+			"obs": self.observacao,
+			"recompensa": self._ler("rl_recompensa"),
+			"terminado": bool(self._ler("rl_terminado")),
+			"motivo": self.MOTIVOS[motivo] if 0 <= motivo < len(self.MOTIVOS) else "",
+			"progresso": self._ler("rl_progresso"),
+			"comprimento": self._ler("rl_comprimento"),
+			"batidas": int(self._ler("rl_batidas")),
+			"passos": int(self._ler("rl_passos")),
+		}
 
 	# ------------------------------------------------------------ interno
 

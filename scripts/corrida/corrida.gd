@@ -14,17 +14,19 @@ class_name Corrida
 ## false = partem em grelha, ligeiramente desfasados.
 @export var partida_sobreposta: bool = true
 
-## true = cada corrida do campeonato (e cada reset do treino RL) usa uma pista nova.
+## true = cada corrida do campeonato usa uma pista nova.
 @export var pista_aleatoria_por_corrida: bool = true
 
-## Inicia o PPO-MLP ao executar a cena diretamente pelo Godot (precisa do nó
-## PonteRL, da .venv e de modelos/ppo_mlp.zip; se faltar algo, ignora-se).
-@export var iniciar_ppo_automaticamente: bool = true
+## Modo treino: um só carro, conduzido por treino_ppo.py, sem regras de corrida.
+## Usa a cena cenas/treino.tscn.
+@export var modo_treino: bool = false
+## Velocidade da simulação no modo treino (1 = tempo real).
+@export var velocidade_treino: float = 20.0
 
 # Lista de carros participantes da corrida
 var carros: Array[Carro] = []
 
-# Estado do campeonato (usado também pela PonteRL)
+# Estado do campeonato
 var corrida_ativa: bool = false
 var tempo_corrida: float = 0.0
 var vencedor: int = -1
@@ -34,7 +36,6 @@ var pontuacoes: Array[int] = []
 @onready var _pista: Pista = $Pista
 @onready var _camera: CamaraPista = $Camera2D
 @onready var _hud: HudCorrida = $HUD
-@onready var _ponte_rl = get_node_or_null("PonteRL")
 
 
 func _ready() -> void:
@@ -43,8 +44,9 @@ func _ready() -> void:
 	_pista.pista_alterada.connect(_ao_pista_alterada)
 	_hud.continuar_clicado.connect(_iniciar_proxima_corrida)
 
-	if iniciar_ppo_automaticamente and _ponte_rl != null:
-		_ponte_rl.iniciar_piloto_local()
+	if modo_treino:
+		_iniciar_treino()
+		return
 
 	# Um carro por linha: cor + script que o conduz (ControladorTeclado, ou load("res://main.py"))
 	Carro.instanciate(Color.YELLOW, ControladorTeclado, "Amarelo")
@@ -54,16 +56,21 @@ func _ready() -> void:
 	_ligar_carros()
 	_ao_pista_alterada()
 
-	# Com o piloto PPO local, a corrida só começa quando o Python pedir o primeiro reset.
-	if _ponte_rl != null and _ponte_rl.piloto_local_ativo():
-		corrida_ativa = false
-		_hud.parar_cronometro()
-		for carro in carros:
-			carro.controlo_manual = false
+
+
+func _iniciar_treino() -> void:
+	set_physics_process(false)   # sem relógio nem fim automático da corrida
+	Engine.time_scale = velocidade_treino
+	Engine.max_physics_steps_per_frame = 64
+	Engine.max_fps = 0
+	Carro.instanciate(Color(0.20, 0.83, 0.49), load("res://treino_ppo.py"), "Treino")
+	_ligar_carros()
+	_ao_pista_alterada()
+	set_physics_process(false)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _ponte_rl != null and _ponte_rl.piloto_local_ativo():
+	if modo_treino:
 		return
 	# R = pista nova com uma seed aleatória
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_R:

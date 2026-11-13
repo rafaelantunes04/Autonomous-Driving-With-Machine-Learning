@@ -1,82 +1,101 @@
-"""Testa o PPO-MLP já treinado no Carro_1 durante cinco corridas no Godot.
-O modelo só escolhe ações durante o teste. Os outros carros ficam parados.
+"""Controlador Python que conduz o carro com o modelo PPO treinado (via py4godot).
+
+Sem torch nem stable-baselines3: os pesos vêm de
+modelos/ppo_mlp.json (escrito pelo treino, cenas/treino.tscn) e a rede
+(MLP 8 -> 64 -> 64 -> 2, tanh) é calculada aqui em Python puro.
+
+As 8 observações são calculadas no Godot (scripts/rl/observacao_rl.gd) e lidas
+com CarroAPI.observacao. Tal como no treino, o modelo escolhe uma ação a cada
+4 ticks de física e mantém-na entre escolhas.
+
+IMPORTANTE: o nome da classe tem de ser igual ao nome do ficheiro
+(corrida_ppo.py -> class corrida_ppo).
 """
-import argparse
-from pathlib import Path
-import numpy as np
-from stable_baselines3 import PPO
-from rl.cliente_godot import ClienteGodot
+
+import json
+import math
+import os
+
+from py4godot.classes import gdclass
+from py4godot.classes.Node import Node
+
+from carro_api import CarroAPI
+
+FICHEIRO_PESOS = os.path.join("modelos", "ppo_mlp.json")
+FRAMES_POR_ACAO = 4   # igual ao treino
+INTERVALO_PRINT = 1.0
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    origem = parser.add_mutually_exclusive_group(required=True)
-    origem.add_argument("--godot", help="Executável para abrir uma nova janela do Godot")
-    origem.add_argument("--conectar", action="store_true", help="Usa o Godot já aberto pelo F5")
-    parser.add_argument("--projeto", default=".")
-    parser.add_argument("--cena", default="res://cenas/track.tscn")
-    parser.add_argument("--porta", type=int, default=8765)
-    parser.add_argument("--seed", type=int, default=10004)
-    args = parser.parse_args()
-    # Carrega os pesos guardados por treinar.py.
-    arquivo = Path(args.projeto) / "modelos" / "ppo_mlp.zip"
-    if not arquivo.is_file():
-        raise SystemExit(f"Modelo nao encontrado: {arquivo}")
-    modelo = PPO.load(str(arquivo), device="cpu")
-    print("Corrida PPO-MLP: 5 voltas, HUD ativo. Carro_1 e controlado pela IA.", flush=True)
-    cliente = ClienteGodot(args.projeto, args.godot, args.cena, args.porta, "race")
-    try:
-        # O Godot abre a pista seguinte quando o jogador clica em Continuar.
-        for corrida in range(1, 6):
-            if corrida == 1:
-                resp = cliente.comando("reset", seed=args.seed, corrida=1)
-            else:
-                print("Aguardando o botão para iniciar a corrida %d..." % corrida, flush=True)
-                resp = cliente.comando(
-                    "aguardar_proxima_corrida",
-                    tempo_limite=None,
-                    corrida=corrida - 1
-                )
-
-            # Lê o estado do carro e devolve a ação escolhida pelo modelo.
-            while not resp["dones"][0]:
-                obs = np.asarray(resp["observations"][0], dtype=np.float32)
-                acao, _ = modelo.predict(obs, deterministic=True)
-                resp = cliente.comando(
-                    "step",
-                    actions=[np.asarray(acao, dtype=float).reshape(-1).tolist()]
-                )
-                info = resp["infos"][0]
-                passos = info["passos"]
-                if passos % 150 == 0:
-                    print(
-                        f"Tempo simulado ~{passos*4/60:.0f}s | "
-                        f"batidas: {info['batidas']} | "
-                        f"progresso: {info['progresso']:.0f} px",
-                        flush=True
-                    )
-
-            info = resp["infos"][0]
-            print("\nRESULTADO CORRIDA %d/5:" % corrida, info, flush=True)
-            if info["motivo"] == "vitoria":
-                print("O PPO completou as 5 voltas!", flush=True)
-            else:
-                print("O PPO nao concluiu as 5 voltas nesta corrida.", flush=True)
-
-        if args.conectar:
-            # O botão Fechar Teste do Godot encerra a ligação.
-            cliente.aguardar_fecho()
-        else:
-            try:
-                input("Pressione Enter para fechar o Godot...")
-            except EOFError:
-                pass
-    except ConnectionError:
-        if not args.conectar:
-            raise
-    finally:
-        cliente.close()
+def _procurar_pesos():
+	"""Procura o JSON junto a este script e na pasta de trabalho do Godot."""
+	bases = []
+	try:
+		bases.append(os.path.dirname(os.path.abspath(__file__)))
+	except NameError:
+		pass
+	bases.append(os.getcwd())
+	for base in bases:
+		caminho = os.path.join(base, FICHEIRO_PESOS)
+		if os.path.isfile(caminho):
+			return caminho
+	return None
 
 
-if __name__ == "__main__":
-    main()
+def _carregar_rede(caminho):
+	with open(caminho, encoding="utf-8") as f:
+		return json.load(f)["camadas"]
+
+
+def _prever(camadas, obs):
+	"""Passagem direta da rede: devolve [acelerar, virar] em [-1, 1] (política determinística)."""
+	x = obs
+	for camada in camadas:
+		x = [sum(w * v for w, v in zip(linha, x)) + b for linha, b in zip(camada["w"], camada["b"])]
+		if camada["ativacao"] == "tanh":
+			x = [math.tanh(v) for v in x]
+	return [max(-1.0, min(1.0, v)) for v in x]
+
+
+@gdclass
+class corrida_ppo(Node):
+	"""Nó que o Godot anexa ao carro e que o comanda a cada tick de física."""
+
+	# O HUD mostra este texto ao lado do nome do carro
+	nome_modelo = "PPO-MLP"
+
+	def _ready(self) -> None:
+		"""Liga-se ao carro (o nó pai) e carrega a rede."""
+		self.carro = CarroAPI(self.get_parent())
+		self.tempo = 0.0
+		self.proximo_print = 0.0
+		self.frames = 0
+		self.acao = [0.0, 0.0]
+		self.rede = None
+
+		caminho = _procurar_pesos()
+		if caminho is None:
+			print("[corrida_ppo] não encontrei %s. Treina primeiro (cenas/treino.tscn)" % FICHEIRO_PESOS)
+			return
+		self.rede = _carregar_rede(caminho)
+		print("[corrida_ppo] pronto, pesos em", caminho)
+
+	def _physics_process(self, delta: float) -> None:
+		"""A cada FRAMES_POR_ACAO ticks lê as observações e escolhe uma nova ação."""
+		if self.rede is None:
+			return
+		self.tempo += delta
+
+		if self.frames % FRAMES_POR_ACAO == 0:
+			self.acao = _prever(self.rede, self.carro.observacao)
+		self.frames += 1
+
+		if self.acao[0] >= 0:
+			self.carro.acelerar(self.acao[0])
+		else:
+			self.carro.recuar(-self.acao[0])
+		self.carro.virar(self.acao[1])
+
+		if self.tempo >= self.proximo_print:
+			self.proximo_print += INTERVALO_PRINT
+			print("[corrida_ppo] velocidade=%.0f km/h | acel=%.2f | volante=%.2f" % (
+				self.carro.velocidade, self.acao[0], self.acao[1]))
