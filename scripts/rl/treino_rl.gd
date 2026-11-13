@@ -65,8 +65,7 @@ func avaliar() -> void:
 		return
 
 	var comp := comprimento()
-	var loc := _obs.localizar(_carro.global_position)
-	var atual: float = loc["progresso"]
+	var atual: float = _obs.localizar(_carro.global_position)["progresso"]
 	var delta: float = atual - _ultimo_progresso
 	if delta > comp * 0.5:
 		delta -= comp
@@ -77,15 +76,17 @@ func avaliar() -> void:
 	delta = clampf(delta, -limite, limite)
 	progresso_total += delta
 
-	var lateral: float = absf(float(loc["lateral"]))
-	recompensa = clampf(delta / 35.0, -2.0, 2.0) - 0.01 - 0.02 * lateral / maxf(_pista.largura * 0.5, 1.0)
+	# Velocidade para a frente, de 0 a 1 (a mesma que a rede vê em obs[0]).
+	var v_frente: float = clampf(
+		_carro.velocity.dot(_carro.transform.x) / maxf(_carro.velocidade_max, 1.0), 0.0, 1.0)
+
+	# Recompensa: avançar na pista (menos distância até ao fim) + um pouco de velocidade.
+	# Não há termo de centragem: a rede aprende a evitar paredes só pela penalização da batida.
+	recompensa = delta / 35.0 + 0.02 * v_frente
 
 	if batidas > 0:
 		recompensa -= 5.0
 		motivo = Motivo.BATIDA
-	elif lateral > _pista.largura * 0.52:
-		recompensa -= 8.0
-		motivo = Motivo.FORA_DA_PISTA
 	elif progresso_total >= comp:
 		recompensa += 20.0
 		motivo = Motivo.VOLTA
