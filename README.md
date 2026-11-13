@@ -139,7 +139,7 @@ O carro também já tem `reiniciar(posicao, rotacao)` em GDScript, que podes exp
 
 `corrida_ppo.py` é um controlador py4godot (como o `main.py`) que corre a política PPO-MLP em Python puro, sem torch. Lê os pesos de `modelos/ppo_mlp.json`, que é escrito pelo treino (ver 3.6). Em `corrida.gd` o carro Verde usa `load("res://corrida_ppo.py")`. Corre o jogo (F5): na consola aparece `[corrida_ppo] pronto, pesos em ...`.
 
-As 8 observações são calculadas em GDScript (`scripts/rl/observacao_rl.gd`) e lidas com `carro.observacao`. O `modelo_x.py` continua a ser o exemplo simples.
+As 7 observações (velocidade, ângulo das rodas e 5 raycasts) são calculadas em GDScript (`scripts/rl/observacao_rl.gd`) e lidas com `carro.observacao`. Um `ppo_mlp.json` antigo (8 entradas) já não serve: o `corrida_ppo.py` avisa e fica parado. Treina de novo, sem `TREINO_CONTINUAR`. O `modelo_x.py` continua a ser o exemplo simples.
 
 ### 3.6 Treinar um modelo (dentro do Godot, sem TCP)
 

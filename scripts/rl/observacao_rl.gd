@@ -1,10 +1,14 @@
 extends RefCounted
 class_name ObservacaoRL
-## Posição do carro na pista e as 8 observações do modelo PPO, calculadas dentro
+## Posição do carro na pista (usada na recompensa) e as 7 observações do modelo, calculadas dentro
 ## do Godot. A ordem dos valores faz parte da interface com o modelo treinado:
 ## não a mudes (nem treino nem corrida_ppo.py funcionam com outra ordem).
 
-const TAMANHO: int = 8
+## Só o que o carro mede por si:
+## 0 velocidade longitudinal, 1 ângulo das rodas,
+## 2-6 raycasts (1.0 = livre, 0.0 = parede encostada), da esquerda para a direita:
+## esquerda_2, esquerda, frente, direita, direita_2.
+const TAMANHO: int = 7
 
 var comprimento: float = 0.0   ## comprimento da linha central, em px
 
@@ -69,18 +73,10 @@ func localizar(pos_global: Vector2) -> Dictionary:
 
 
 func calcular(carro: Carro) -> PackedFloat32Array:
-	if _pista.centerline.size() < 2:
-		return PackedFloat32Array([0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0])
-	var loc := localizar(carro.global_position)
-	var tangente: Vector2 = loc["tangente"]
-	var alvo: Vector2 = loc["alvo"]
-	var angulo: float = wrapf(carro.global_rotation - tangente.rotated(_pista.global_rotation).angle(), -PI, PI)
-	var alvo_angulo: float = wrapf(alvo.rotated(_pista.global_rotation).angle() - carro.global_rotation, -PI, PI)
 	var vmax: float = maxf(carro.velocidade_max, 1.0)
 	return PackedFloat32Array([
 		clampf(carro.velocity.dot(carro.transform.x) / vmax, -1.0, 1.0),
-		clampf(float(loc["lateral"]) / maxf(_pista.largura * 0.5, 1.0), -3.0, 3.0),
-		sin(angulo), cos(angulo), sin(alvo_angulo), cos(alvo_angulo),
 		clampf(carro.direcao_rodas / deg_to_rad(30.0), -1.0, 1.0),
-		clampf(carro.velocity.length() / vmax, 0.0, 1.0),
+		carro.estado_sensor_left_2, carro.estado_sensor_left, carro.estado_sensor_front,
+		carro.estado_sensor_right, carro.estado_sensor_right_2,
 	])

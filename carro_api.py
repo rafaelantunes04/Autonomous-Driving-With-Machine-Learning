@@ -118,8 +118,11 @@ class CarroAPI:
 
 	@property
 	def observacao(self):
-		"""As 8 observações do modelo PPO (lista de floats), ver scripts/rl/observacao_rl.gd."""
-		return [self._ler("estado_obs_%d" % i) for i in range(8)]
+		"""As 7 observações do modelo (lista de floats), ver scripts/rl/observacao_rl.gd.
+
+		0: velocidade longitudinal; 1: ângulo das rodas; 2-6: raycasts (esq_2, esq, frente, dir, dir_2).
+		"""
+		return [self._ler("estado_obs_%d" % i) for i in range(7)]
 
 	# --- Treino por reforço (ver scripts/rl/treino_rl.gd) ---
 	MOTIVOS = ("", "batida", "fora_da_pista", "volta", "tempo")
