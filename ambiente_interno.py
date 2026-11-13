@@ -22,11 +22,12 @@ class AmbienteInterno(gym.Env):
 	def __init__(self, q_cmd: "queue.Queue", q_res: "queue.Queue", parar):
 		super().__init__()
 		self.q_cmd, self.q_res, self.parar = q_cmd, q_res, parar
-		# Duas ações: acelerador/travão e direção. O Godot calcula as oito observações.
+		# Duas ações: acelerador/travão e direção. O Godot calcula as 7 observações
+		# (velocidade, ângulo das rodas e 5 raycasts, ver scripts/rl/observacao_rl.gd).
 		self.action_space = spaces.Box(-1.0, 1.0, shape=(2,), dtype=np.float32)
 		self.observation_space = spaces.Box(
-			low=np.array([-1, -3, -1, -1, -1, -1, -1, 0], dtype=np.float32),
-			high=np.array([1, 3, 1, 1, 1, 1, 1, 1], dtype=np.float32),
+			low=np.array([-1, -1, 0, 0, 0, 0, 0], dtype=np.float32),
+			high=np.array([1, 1, 1, 1, 1, 1, 1], dtype=np.float32),
 			dtype=np.float32,
 		)
 

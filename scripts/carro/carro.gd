@@ -101,8 +101,8 @@ var estado_rumo: float:             ## graus, 0 a 360 (0 = +X)
 		return fposmod(rotation_degrees, 360.0)
 
 
-# Observações do modelo PPO (8 valores), calculadas uma vez por tick de física.
-# O Python lê-as com get("estado_obs_0") ... get("estado_obs_7") (ver CarroAPI.observacao).
+# Observações do modelo (7 valores), calculadas uma vez por tick de física.
+# O Python lê-as com get("estado_obs_0") ... get("estado_obs_6") (ver CarroAPI.observacao).
 var _observacao_rl: ObservacaoRL
 var _obs_cache := PackedFloat32Array()
 var _obs_tick: int = -1
@@ -138,8 +138,6 @@ var estado_obs_5: float:
 	get: return _obs(5)
 var estado_obs_6: float:
 	get: return _obs(6)
-var estado_obs_7: float:
-	get: return _obs(7)
 
 
 # Treino por reforço (usado por treino_ppo.py via py4godot). Tudo em tipos simples.
@@ -375,6 +373,7 @@ func _ler_sensor(sensor: RayCast2D) -> float:
 		return 1.0
 	if not sensor.is_enabled():
 		sensor.enabled = true
+	sensor.force_raycast_update()   # sem isto a leitura pode ser do tick anterior (ex.: logo após um reset)
 	if not sensor.is_colliding():
 		return 1.0  # Sem obstáculo detetado
 	

@@ -2,9 +2,9 @@
 
 Sem torch nem stable-baselines3: os pesos vêm de
 modelos/ppo_mlp.json (escrito pelo treino, cenas/treino.tscn) e a rede
-(MLP 8 -> 64 -> 64 -> 2, tanh) é calculada aqui em Python puro.
+(MLP 7 -> 64 -> 64 -> 2, tanh) é calculada aqui em Python puro.
 
-As 8 observações são calculadas no Godot (scripts/rl/observacao_rl.gd) e lidas
+As 7 observações (velocidade, ângulo das rodas e 5 raycasts) são calculadas no Godot (scripts/rl/observacao_rl.gd) e lidas
 com CarroAPI.observacao. Tal como no treino, o modelo escolhe uma ação a cada
 4 ticks de física e mantém-na entre escolhas.
 
@@ -23,6 +23,7 @@ from carro_api import CarroAPI
 
 FICHEIRO_PESOS = os.path.join("modelos", "ppo_mlp.json")
 FRAMES_POR_ACAO = 4   # igual ao treino
+OBSERVACOES = 7       # igual a ObservacaoRL.TAMANHO
 INTERVALO_PRINT = 1.0
 
 
@@ -76,7 +77,12 @@ class corrida_ppo(Node):
 		if caminho is None:
 			print("[corrida_ppo] não encontrei %s. Treina primeiro (cenas/treino.tscn)" % FICHEIRO_PESOS)
 			return
-		self.rede = _carregar_rede(caminho)
+		rede = _carregar_rede(caminho)
+		entradas = len(rede[0]["w"][0])
+		if entradas != OBSERVACOES:
+			print("[corrida_ppo] %s espera %d observações e o carro dá %d: é de um modelo antigo. Treina de novo." % (caminho, entradas, OBSERVACOES))
+			return
+		self.rede = rede
 		print("[corrida_ppo] pronto, pesos em", caminho)
 
 	def _physics_process(self, delta: float) -> None:
