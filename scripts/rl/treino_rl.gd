@@ -6,7 +6,7 @@ class_name TreinoRL
 
 enum Motivo { NENHUM, BATIDA, FORA_DA_PISTA, VOLTA, TEMPO }
 
-const FRAMES_POR_ACAO: int = 4
+const FRAMES_POR_ACAO: int = 1
 const LIMITE_PASSOS: int = 1600
 
 var recompensa: float = 0.0

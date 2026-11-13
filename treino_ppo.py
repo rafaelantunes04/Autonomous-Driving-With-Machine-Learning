@@ -10,11 +10,12 @@ Escolhe-se o modelo e a duração com variáveis de ambiente:
     TREINO_MODELO = ppo_mlp (por omissão) | ppo_lstm | sac_mlp
     TREINO_PASSOS = 100000 (por omissão)
     TREINO_CONTINUAR = 1 para continuar a partir de modelos/ppo_mlp.json (por omissão 0 = do zero)
-    TREINO_GUARDAR_CADA = 10000 (por omissão): guarda o modelo de X em X passos durante o treino
+    TREINO_GUARDAR_CADA_EPISODIOS = 100 (por omissão): guarda o modelo de X em X episódios
+                          (tentativas) durante o treino, substituindo sempre o ficheiro anterior
                           (0 = só guarda no fim)
 
 Guarda os pesos em modelos/<modelo>.json (é o que o corrida_ppo.py lê) durante o
-treino (de X em X passos) e no fim, e fecha o jogo. Só o ppo_mlp tem este formato; o ppo_lstm e o sac_mlp, que não
+treino (de X em X episódios, sempre por cima do anterior) e no fim, e fecha o jogo. Só o ppo_mlp tem este formato; o ppo_lstm e o sac_mlp, que não
 cabem num JSON simples, são guardados como modelos/<modelo>.zip do SB3.
 
 IMPORTANTE: o nome da classe tem de ser igual ao nome do ficheiro.
@@ -172,31 +173,35 @@ def treinar(env, nome_modelo, passos, pasta):
 			carregar_estado(modelo, json.load(f))
 		print("[treino_ppo] a continuar a partir de", destino + ".json", flush=True)
 
-	# Backup do modelo antigo ANTES de começar: os guardados periódicos vão escrever por cima do .json.
+	# Backup do modelo antigo ANTES de começar: o guardado final vai escrever por cima do .json.
 	if nome_modelo == "ppo_mlp" and not continuar and os.path.isfile(destino + ".json"):
 		shutil.copyfile(destino + ".json", destino + ".anterior.json")   # não perder o modelo antigo
 
 	from stable_baselines3.common.callbacks import BaseCallback
 
-	class GuardarPeriodico(BaseCallback):
-		"""Guarda o modelo de X em X passos, para não perder o treino se o jogo fechar à força."""
+	class GuardarPorEpisodios(BaseCallback):
+		"""Guarda o modelo de X em X episódios (tentativas), substituindo o ficheiro anterior."""
 
 		def __init__(self, cada):
 			super().__init__()
 			self.cada = cada
-			self._ultimo = 0
+			self.episodios = 0
 
 		def _on_step(self):
-			if self.num_timesteps - self._ultimo >= self.cada:
-				self._ultimo = self.num_timesteps
-				try:
-					_guardar(self.model, nome_modelo, destino)
-				except Exception:   # um erro a guardar não deve matar o treino
-					traceback.print_exc()
+			# 'dones' tem um True por cada ambiente cujo episódio acabou neste passo
+			terminados = int(self.locals["dones"].sum())
+			for _ in range(terminados):
+				self.episodios += 1
+				if self.episodios % self.cada == 0:
+					try:
+						_guardar(self.model, nome_modelo, destino)   # substitui o último guardado
+						print("[treino_ppo] episódio %d" % self.episodios, flush=True)
+					except Exception:   # um erro a guardar não deve matar o treino
+						traceback.print_exc()
 			return True
 
-	cada = int(os.environ.get("TREINO_GUARDAR_CADA", "10000"))
-	callback = GuardarPeriodico(cada) if cada > 0 else None
+	cada = int(os.environ.get("TREINO_GUARDAR_CADA_EPISODIOS", "100"))
+	callback = GuardarPorEpisodios(cada) if cada > 0 else None
 	try:
 		modelo.learn(total_timesteps=passos, callback=callback, progress_bar=False)
 	finally:

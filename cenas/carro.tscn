@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://oyshle6js32d"]
 
-[ext_resource type="Script" uid="uid://van8x1uoc4v4" path="res://scripts/carro/carro.gd" id="1_dvi8e"]
+[ext_resource type="Script" uid="uid://c4omcw1jvjhpa" path="res://scripts/carro/carro.gd" id="1_dvi8e"]
 
 [sub_resource type="QuadMesh" id="QuadMesh_0vdwr"]
 size = Vector2(40, 20)
@@ -18,16 +18,16 @@ mesh = SubResource("QuadMesh_0vdwr")
 shape = SubResource("RectangleShape2D_0vdwr")
 
 [node name="Front_Sensor" type="RayCast2D" parent="." unique_id=1690895275]
-target_position = Vector2(150, 0)
+target_position = Vector2(400, 0)
 
 [node name="Right_Sensor" type="RayCast2D" parent="." unique_id=1842989439]
-target_position = Vector2(150, 100)
-
-[node name="Right_Sensor_2" type="RayCast2D" parent="." unique_id=1733802609]
-target_position = Vector2(50, 150)
-
-[node name="Left_Sensor_2" type="RayCast2D" parent="." unique_id=1449231431]
-target_position = Vector2(50, -150)
+target_position = Vector2(300, 100)
 
 [node name="Left_Sensor" type="RayCast2D" parent="." unique_id=2135039098]
-target_position = Vector2(150, -100)
+target_position = Vector2(300, -100)
+
+[node name="Right_Sensor_2" type="RayCast2D" parent="." unique_id=1733802609]
+target_position = Vector2(100, 150)
+
+[node name="Left_Sensor_2" type="RayCast2D" parent="." unique_id=1449231431]
+target_position = Vector2(100, -150)
