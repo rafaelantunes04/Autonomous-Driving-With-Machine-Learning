@@ -27,7 +27,7 @@ import queue
 import shutil
 import threading
 import traceback
-
+import torch
 from py4godot.classes import gdclass
 from py4godot.classes.Node import Node
 
@@ -36,6 +36,8 @@ from carro_api import CarroAPI
 FRAMES_POR_ACAO = 4   # tem de ser igual a TreinoRL.FRAMES_POR_ACAO
 ESPERA, CORRENDO = 0, 1
 
+DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"[treino_ppo] A utilizar o dispositivo para treino: {DISPOSITIVO.upper()}", flush=True)
 
 def _pasta_projeto():
 	"""Pasta do projeto: junto a este script, ou a pasta de trabalho do Godot."""
@@ -150,7 +152,7 @@ def treinar(env, nome_modelo, passos, pasta):
 	os.makedirs(os.path.join(pasta, "logs"), exist_ok=True)
 	env = Monitor(env, filename=os.path.join(pasta, "logs", nome_modelo + "_episodios.csv"))
 
-	kwargs = {"verbose": 1, "seed": 42, "device": "cpu"}
+	kwargs = {"verbose": 1, "seed": 42, "device": DISPOSITIVO}
 	try:
 		import tensorboard  # noqa: F401
 		kwargs["tensorboard_log"] = os.path.join(pasta, "logs", "tensorboard")
