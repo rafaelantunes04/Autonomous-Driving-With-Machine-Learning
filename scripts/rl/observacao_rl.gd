@@ -25,8 +25,15 @@ func invalidar() -> void:
 	_distancias = PackedFloat32Array()
 
 
+## Comprimento da linha central, em px.
+func comprimento_pista() -> float:
+	if _distancias.size() != _pista.linha_central.size():
+		_preparar()
+	return comprimento
+
+
 func _preparar() -> void:
-	var linha: PackedVector2Array = _pista.centerline
+	var linha: PackedVector2Array = _pista.linha_central
 	_distancias = PackedFloat32Array()
 	comprimento = 0.0
 	var n := linha.size()
@@ -37,7 +44,7 @@ func _preparar() -> void:
 
 ## progresso (px ao longo da linha central), lateral (px, com sinal), tangente e alvo.
 func localizar(pos_global: Vector2) -> Dictionary:
-	var linha: PackedVector2Array = _pista.centerline
+	var linha: PackedVector2Array = _pista.linha_central
 	if linha.size() < 2:
 		return {"progresso": 0.0, "lateral": 0.0, "tangente": Vector2.RIGHT, "alvo": Vector2.RIGHT}
 	if _distancias.size() != linha.size():

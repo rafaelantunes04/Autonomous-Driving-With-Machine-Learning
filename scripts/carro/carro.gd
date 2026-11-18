@@ -1,7 +1,7 @@
 extends CharacterBody2D
 class_name Carro
 
-#####							FISICA
+# ------------------------------------------------------------------ Física
 @export_group("Motor")
 @export var potencia_motor: float = 560.0      ## força máxima a baixa velocidade
 @export var potencia_travao: float = 800.0
@@ -39,31 +39,34 @@ signal colidiu(colisor: Node, velocidade_kmh: float)
 
 
 
-#####							CONFIGS
+# ------------------------------------------------------------------ Identificação
 @export var nome: String = ""
 @export var cor: Color = Color.WHITE
 @export var controlador: Node
 
 
-#####							OUTROS
+# ------------------------------------------------------------------ Constantes e estado
 const CENA := "res://cenas/carro.tscn"
 const GRUPO := &"carros"
 const CAMADA_PAREDES := 1
 const CAMADA_CARROS := 2
+const VELOCIDADE_PARADO := 5.0         ## px/s: abaixo disto e sem input, o carro pára de vez
+const VELOCIDADE_MIN_TRAVAGEM := 10.0  ## px/s: abaixo disto o pedal para trás engata a marcha-atrás
+const FATOR_MARCHA_ATRAS := 0.5        ## fração da potência do motor usada em marcha-atrás
 var estatisticas: EstatisticasCorrida   ## batidas, tempo e voltas (filho deste nó)
 
 
-#####							INPUTS
 # Comandos, ambos em [-1, 1]. Sem controlador ficam a 0 (carro parado).
 var input_acel: float = 0.0   ## +1 acelera, -1 trava/marcha-atrás
 var input_dir: float = 0.0    ## +1 direita, -1 esquerda
 
-var em_colisao: bool = false
-var acelerador: float = 0.0   ## acelerador suavizado
-var direcao_rodas: float = 0.0
+var direcao_rodas: float = 0.0   ## ângulo atual das rodas (rad)
+
+var _em_colisao: bool = false
+var _acelerador: float = 0.0   ## acelerador suavizado
 
 
-#####							SENSORES
+# ------------------------------------------------------------------ Sensores e estado lido pelo Python
 @onready var _sensor_front: RayCast2D = $Front_Sensor
 @onready var _sensor_right: RayCast2D = $Right_Sensor
 @onready var _sensor_right_2: RayCast2D = $Right_Sensor_2
@@ -101,18 +104,21 @@ var estado_rumo: float:             ## graus, 0 a 360 (0 = +X)
 		return fposmod(rotation_degrees, 360.0)
 
 
-# Observações do modelo (7 valores), calculadas uma vez por tick de física.
+# Observações do modelo (ObservacaoRL.TAMANHO valores), calculadas uma vez por tick de física.
 # O Python lê-as com get("estado_obs_0") ... get("estado_obs_6") (ver CarroAPI.observacao).
 var _observacao_rl: ObservacaoRL
 var _obs_cache := PackedFloat32Array()
 var _obs_tick: int = -1
 
+
+## Cria à primeira chamada o ObservacaoRL (precisa da Pista, irmã deste nó).
 func _obs_helper() -> ObservacaoRL:
 	if _observacao_rl == null:
 		var pista := get_parent().get_node_or_null("Pista") as Pista
 		if pista != null:
 			_observacao_rl = ObservacaoRL.new(pista)
 	return _observacao_rl
+
 
 func _obs(i: int) -> float:
 	var tick := Engine.get_physics_frames()
@@ -123,6 +129,12 @@ func _obs(i: int) -> float:
 		_obs_tick = tick
 		_obs_cache = helper.calcular(self)
 	return _obs_cache[i] if i < _obs_cache.size() else 0.0
+
+
+## Obriga a recalcular as observações no próximo acesso (ex.: depois de um reset).
+func invalidar_observacao() -> void:
+	_obs_tick = -1
+
 
 var estado_obs_0: float:
 	get: return _obs(0)
@@ -143,12 +155,14 @@ var estado_obs_6: float:
 # Treino por reforço (usado por treino_ppo.py via py4godot). Tudo em tipos simples.
 var _treino_rl: TreinoRL
 
+
 func _treino() -> TreinoRL:
 	if _treino_rl == null:
 		var helper := _obs_helper()
 		if helper != null:
-			_treino_rl = TreinoRL.new(self, get_parent() as Corrida, get_parent().get_node("Pista") as Pista, helper)
+			_treino_rl = TreinoRL.new(self, get_parent() as Corrida, helper)
 	return _treino_rl
+
 
 var rl_reset: int = 0:                 ## escrever uma seed = nova pista + recomeçar o episódio
 	set(seed_):
@@ -171,20 +185,8 @@ var rl_recompensa: float:
 	get: return _treino_rl.recompensa if _treino_rl != null else 0.0
 var rl_terminado: bool:
 	get: return _treino_rl.terminado if _treino_rl != null else false
-var rl_motivo: int:                    ## 0 nenhum, 1 batida, 2 fora da pista, 3 volta, 4 tempo
+var rl_motivo: int:                    ## ver TreinoRL.Motivo: 0 nenhum, 1 batida, 2 volta, 3 tempo
 	get: return _treino_rl.motivo if _treino_rl != null else 0
-var rl_progresso: float:
-	get: return _treino_rl.progresso_total if _treino_rl != null else 0.0
-var rl_comprimento: float:
-	get: return _treino_rl.comprimento() if _treino_rl != null else 0.0
-var rl_batidas: int:
-	get: return _treino_rl.batidas if _treino_rl != null else 0
-var rl_passos: int:
-	get: return _treino_rl.passos if _treino_rl != null else 0
-
-
-func _ready() -> void:
-	pass
 
 
 func _physics_process(delta: float) -> void:
@@ -201,30 +203,25 @@ func _physics_process(delta: float) -> void:
 # ------------------------------------------------------------------ Criação
 
 ## Cria um carro completo (física, cor, controlador, estatísticas) e põe-no na
-## árvore, já no grupo "carros". Uso:
-##   Carro.instanciate(Carro.criar_config(Color.YELLOW, ControladorTeclado))
-##
-## - participante: ver criar_config(). null = carro branco de teclado.
-## - pai: nó onde o carro é adicionado. null = a cena atual (ou a raiz da árvore).
+## cena atual, já no grupo "carros". Uso:
+##   Carro.instanciate(Color.YELLOW, ControladorTeclado, "Amarelo")
+##   Carro.instanciate(Color.RED, load("res://main.py"), "Python")
+## `script_controlador` é o script que conduz o carro (um .gd ou um .py).
+## Sem nome, o carro chama-se "Carro N".
 static func instanciate(cor: Color = Color.WHITE, script_controlador: Script = ControladorTeclado, nome: String = "") -> Carro:
 	var arvore := Engine.get_main_loop() as SceneTree
 	var posicao := arvore.get_nodes_in_group(GRUPO).size()   # 0 = o primeiro carro
 
 	var carro := (load(CENA) as PackedScene).instantiate() as Carro
-	carro.nome = nome
+	carro.nome = nome if not nome.is_empty() else "Carro %d" % (posicao + 1)
 	carro.cor = cor
-	
+	carro.modulate = cor
 	carro.z_index = 1000 - posicao   # o primeiro carro fica por cima dos outros
-
-	if carro.nome.is_empty():
-		carro.nome = "Carro %d" % (posicao + 1)
-	carro.modulate = carro.cor
 
 	# Por omissão os carros só colidem com as paredes
 	carro.collision_layer = CAMADA_CARROS
 	carro.collision_mask = CAMADA_PAREDES
-	
-	# Setup Controlador
+
 	carro.controlador = Node.new()
 	carro.controlador.name = "Controlador"
 	carro.controlador.set_script(script_controlador)
@@ -234,24 +231,13 @@ static func instanciate(cor: Color = Color.WHITE, script_controlador: Script = C
 	carro.estatisticas.name = "Estatisticas"
 	carro.add_child(carro.estatisticas)
 	carro.estatisticas.configurar(carro)
-	
-	arvore.current_scene.add_child(carro)
 
+	arvore.current_scene.add_child(carro)
 	carro.add_to_group(GRUPO)
 	return carro
 
 
 # ------------------------------------------------------------------ API pública
-
-## true  = o controlador (filho deste carro: teclado, GDScript ou Python) conduz.
-## false = o controlador fica parado e quem manda é código externo, que
-##         escreve os comandos com aplicar_comandos().
-var controlo_manual: bool = true:
-	set(valor):
-		controlo_manual = valor
-		if controlador != null:
-			controlador.set_physics_process(valor and is_physics_processing())
-
 
 ## Atalho para controladores externos (RL, Python, ...). Valores em [-1, 1].
 func aplicar_comandos(acelerar: float, virar: float) -> void:
@@ -259,12 +245,12 @@ func aplicar_comandos(acelerar: float, virar: float) -> void:
 	input_dir = clampf(virar, -1.0, 1.0)
 
 
-## Liga ou desliga a física do carro (e do seu controlador, se controlo_manual).
+## Liga ou desliga a física do carro e do seu controlador.
 ## Usado pela Corrida para congelar os carros no fim de uma corrida.
 func ativar(ligado: bool) -> void:
 	set_physics_process(ligado)
 	if controlador != null:
-		controlador.set_physics_process(ligado and controlo_manual)
+		controlador.set_physics_process(ligado)
 
 
 ## Liga ou desliga a colisão com outros carros (as paredes colidem sempre).
@@ -277,11 +263,11 @@ func reiniciar(nova_posicao: Vector2, nova_rotacao: float) -> void:
 	global_position = nova_posicao
 	global_rotation = nova_rotacao
 	velocity = Vector2.ZERO
-	acelerador = 0.0
+	_acelerador = 0.0
 	direcao_rodas = 0.0
 	input_acel = 0.0
 	input_dir = 0.0
-	em_colisao = false
+	_em_colisao = false
 	if estatisticas != null:
 		estatisticas.reiniciar()
 
@@ -294,12 +280,12 @@ func _detetar_colisoes(vel_antes: Vector2, delta: float) -> void:
 	var n := get_slide_collision_count()
 	if n > 0:
 		var colisao := get_slide_collision(0)
-		if not em_colisao:
+		if not _em_colisao:
 			var frontal := clampf(-vel_antes.normalized().dot(colisao.get_normal()), 0.0, 1.0)
 			velocity *= 1.0 - perda_impacto * frontal
 			colidiu.emit(colisao.get_collider(), vel_antes.length() / pixels_por_kmh)
 		velocity *= exp(-atrito_parede * delta)
-	em_colisao = n > 0
+	_em_colisao = n > 0
 
 
 ## Calcula a aceleração: motor/travão/marcha-atrás menos as resistências.
@@ -308,23 +294,23 @@ func _calcular_aceleracao(delta: float) -> Vector2:
 	var vel_frente := velocity.dot(frente)
 
 	# Acelerador progressivo: sobe devagar, desce mais depressa
-	var taxa := (1.0 / tempo_acelerador) if absf(input_acel) > absf(acelerador) else (1.0 / tempo_largar)
-	acelerador = move_toward(acelerador, input_acel, taxa * delta)
+	var taxa := (1.0 / tempo_acelerador) if absf(input_acel) > absf(_acelerador) else (1.0 / tempo_largar)
+	_acelerador = move_toward(_acelerador, input_acel, taxa * delta)
 
 	var forca := 0.0
-	if acelerador > 0.0:
+	if _acelerador > 0.0:
 		# A força do motor cai à medida que se aproxima da velocidade máxima
 		var restante := clampf(1.0 - vel_frente / velocidade_max, 0.0, 1.0)
-		forca = acelerador * potencia_motor * restante
-	elif acelerador < 0.0:
-		if vel_frente > 10.0:
-			forca = acelerador * potencia_travao  # travagem
+		forca = _acelerador * potencia_motor * restante
+	elif _acelerador < 0.0:
+		if vel_frente > VELOCIDADE_MIN_TRAVAGEM:
+			forca = _acelerador * potencia_travao  # travagem
 		else:
 			var restante_re := clampf(1.0 - (-vel_frente) / velocidade_max_re, 0.0, 1.0)
-			forca = acelerador * potencia_motor * 0.5 * restante_re  # marcha-atrás
+			forca = _acelerador * potencia_motor * FATOR_MARCHA_ATRAS * restante_re  # marcha-atrás
 
 	# Sem input e quase parado: pára de vez
-	if velocity.length() < 5.0 and absf(input_acel) < 0.01:
+	if velocity.length() < VELOCIDADE_PARADO and absf(input_acel) < 0.01:
 		velocity = Vector2.ZERO
 		return Vector2.ZERO
 

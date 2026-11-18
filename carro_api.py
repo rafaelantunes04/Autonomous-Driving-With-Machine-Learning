@@ -13,18 +13,29 @@
 	carro.velocidade               # km/h (negativo em marcha-atrás)
 	carro.rumo                     # graus 0-360, para onde o carro aponta
 	carro.angulo_rodas             # graus, positivo = rodas à direita
+	carro.sensores                 # {"frente": 0-1, "esquerda": ..., ...} (1 = livre, 0 = parede)
+	carro.observacao               # as 7 observações do modelo
 
 Este ficheiro não depende do py4godot: só fala com o nó do carro via get/set.
+O que é só para o treino está em carro_treino_api.py.
 """
 
 import traceback
 
+from constantes import OBSERVACOES
+
+# Nome do sensor -> propriedade do carro (scripts/carro/carro.gd)
+SENSORES = {
+	"esquerda_2": "estado_sensor_left_2",
+	"esquerda": "estado_sensor_left",
+	"frente": "estado_sensor_front",
+	"direita": "estado_sensor_right",
+	"direita_2": "estado_sensor_right_2",
+}
+
 
 def _limitar(valor, minimo=-1.0, maximo=1.0):
-	"""Converte `valor` para float e prende-o ao intervalo [minimo, maximo].
-
-	Garante que nunca enviamos ao carro um comando fora do que ele aceita.
-	"""
+	"""Converte `valor` para float e prende-o ao intervalo [minimo, maximo]."""
 	return max(minimo, min(maximo, float(valor)))
 
 
@@ -32,12 +43,7 @@ class CarroAPI:
 	"""Interface simples para controlar o carro (um nó Carro do Godot)."""
 
 	def __init__(self, no_carro):
-		"""Liga a API ao nó do carro.
-
-		`no_carro` é o nó Godot com o script carro.gd (o pai do controlador).
-		O carro já não lê o teclado por si: só obedece a quem for o seu
-		controlador, que aqui é este código.
-		"""
+		"""`no_carro` é o nó Godot com o script carro.gd (o pai do controlador)."""
 		self._no = no_carro
 		self._erros_mostrados = set()
 
@@ -48,15 +54,11 @@ class CarroAPI:
 		self._escrever("input_acel", _limitar(forca, 0.0, 1.0))
 
 	def recuar(self, forca):
-		"""Pedal para trás. `forca`: 0 (solto) a 1 (a fundo).
-
-		Se o carro ainda vai para a frente, trava; quando está (quase) parado,
-		engata a marcha-atrás.
-		"""
+		"""Pedal para trás. `forca`: 0 a 1. Trava se ainda vai para a frente; engata a marcha-atrás quando está quase parado."""
 		self._escrever("input_acel", -_limitar(forca, 0.0, 1.0))
 
 	def largar_pedal(self):
-		"""Larga o pedal (força 0): o carro deixa de acelerar e vai abrandando."""
+		"""Larga o pedal: o carro deixa de acelerar e vai abrandando."""
 		self._escrever("input_acel", 0.0)
 
 	def virar(self, valor):
@@ -70,8 +72,7 @@ class CarroAPI:
 
 	def parar(self):
 		"""Larga o pedal e põe o volante a direito."""
-		self.largar_pedal()
-		self.virar(0.0)
+		self.comando(0.0, 0.0)
 
 	# ------------------------------------------------------------ leitura
 
@@ -90,90 +91,30 @@ class CarroAPI:
 		"""Ângulo das rodas da frente, em graus (positivo = rodas à direita)."""
 		return self._ler("estado_angulo_rodas")
 
-	# --- Sensores (RayCasts) ---
 	@property
-	def sensor_front(self):
-		"""Leitura do Front_Sensor (0.0 a 1.0)."""
-		return self._ler("estado_sensor_front")
-
-	@property
-	def sensor_right(self):
-		"""Leitura do Right_Sensor (0.0 a 1.0)."""
-		return self._ler("estado_sensor_right")
-
-	@property
-	def sensor_right_2(self):
-		"""Leitura do Right_Sensor_2 (0.0 a 1.0)."""
-		return self._ler("estado_sensor_right_2")
-
-	@property
-	def sensor_left(self):
-		"""Leitura do Left_Sensor (0.0 a 1.0)."""
-		return self._ler("estado_sensor_left")
-
-	@property
-	def sensor_left_2(self):
-		"""Leitura do Left_Sensor_2 (0.0 a 1.0)."""
-		return self._ler("estado_sensor_left_2")
+	def sensores(self):
+		"""Leitura dos 5 raycasts, de 0.0 (parede encostada) a 1.0 (livre)."""
+		return {nome: self._ler(propriedade) for nome, propriedade in SENSORES.items()}
 
 	@property
 	def observacao(self):
-		"""As 7 observações do modelo (lista de floats), ver scripts/rl/observacao_rl.gd.
+		"""As observações do modelo (lista de floats), ver scripts/rl/observacao_rl.gd.
 
 		0: velocidade longitudinal; 1: ângulo das rodas; 2-6: raycasts (esq_2, esq, frente, dir, dir_2).
 		"""
-		return [self._ler("estado_obs_%d" % i) for i in range(7)]
-
-	# --- Treino por reforço (ver scripts/rl/treino_rl.gd) ---
-	MOTIVOS = ("", "batida", "fora_da_pista", "volta", "tempo")
-
-	def rl_reiniciar(self, seed):
-		"""Pista nova e carro na partida, parado e congelado até ao primeiro passo."""
-		self._escrever("rl_reset", int(seed))
-
-	def rl_congelar(self, congelado):
-		"""True pára a física do carro (entre ações); False deixa-a correr."""
-		self._escrever("rl_congelado", bool(congelado))
-
-	def rl_avaliar(self):
-		"""Fecha um passo: calcula a recompensa e se o episódio acabou."""
-		self._escrever("rl_avaliar", True)
-
-	def rl_sair(self):
-		"""Fecha o jogo."""
-		self._escrever("rl_sair", True)
-
-	def rl_resultado(self):
-		"""Observação, recompensa e estado do episódio, num dicionário simples."""
-		motivo = int(self._ler("rl_motivo"))
-		return {
-			"obs": self.observacao,
-			"recompensa": self._ler("rl_recompensa"),
-			"terminado": bool(self._ler("rl_terminado")),
-			"motivo": self.MOTIVOS[motivo] if 0 <= motivo < len(self.MOTIVOS) else "",
-			"progresso": self._ler("rl_progresso"),
-			"comprimento": self._ler("rl_comprimento"),
-			"batidas": int(self._ler("rl_batidas")),
-			"passos": int(self._ler("rl_passos")),
-		}
+		return [self._ler("estado_obs_%d" % i) for i in range(OBSERVACOES)]
 
 	# ------------------------------------------------------------ interno
 
 	def _escrever(self, propriedade, valor):
-		"""Escreve `valor` numa propriedade do nó do carro (ex.: "input_acel").
-
-		Se falhar, avisa uma vez e continua, para não rebentar o jogo.
-		"""
+		"""Escreve `valor` numa propriedade do nó do carro. Se falhar, avisa uma vez e continua."""
 		try:
 			self._no.set(propriedade, valor)
 		except Exception:
 			self._avisar("set", propriedade)
 
 	def _ler(self, propriedade):
-		"""Lê uma propriedade numérica do nó do carro e devolve-a como float.
-
-		Se falhar, avisa uma vez e devolve 0.0.
-		"""
+		"""Lê uma propriedade numérica do nó do carro como float. Se falhar, avisa uma vez e devolve 0.0."""
 		try:
 			return float(self._no.get(propriedade))
 		except Exception:
@@ -181,10 +122,7 @@ class CarroAPI:
 			return 0.0
 
 	def _avisar(self, operacao, propriedade):
-		"""Imprime o erro atual na consola, mas só da primeira vez que acontece.
-
-		Evita encher a consola com a mesma mensagem 60 vezes por segundo.
-		"""
+		"""Imprime o erro atual só da primeira vez, para não encher a consola 60x por segundo."""
 		chave = (operacao, propriedade)
 		if chave in self._erros_mostrados:
 			return

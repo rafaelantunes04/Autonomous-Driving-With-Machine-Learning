@@ -45,6 +45,11 @@ func _physics_process(delta: float) -> void:
 	# +90° para o carro aparecer a apontar para cima no ecrã
 	var alvo_rot := (alvo.rotation + PI / 2.0) if a_seguir else 0.0
 
-	global_position = global_position.lerp(alvo_pos, 1.0 - exp(-atraso_posicao * delta))
-	rotation = lerp_angle(rotation, alvo_rot, 1.0 - exp(-atraso_rotacao * delta))
-	zoom = zoom.lerp(alvo_zoom, 1.0 - exp(-atraso_zoom * delta))
+	global_position = global_position.lerp(alvo_pos, _suavizar(atraso_posicao, delta))
+	rotation = lerp_angle(rotation, alvo_rot, _suavizar(atraso_rotacao, delta))
+	zoom = zoom.lerp(alvo_zoom, _suavizar(atraso_zoom, delta))
+
+
+## Fração do caminho a percorrer neste tick (independente dos FPS).
+func _suavizar(atraso: float, delta: float) -> float:
+	return 1.0 - exp(-atraso * delta)

@@ -11,9 +11,7 @@ class_name ControladorCarro
 ## através do CarroAPI.
 ##
 ## Se o controlador for um agente de IA, o algoritmo e a rede ficam dentro do
-## próprio script; nome_modelo é só o texto mostrado no HUD.
-
-@export var nome_modelo: String = ""
+## próprio script.
 
 var carro: Carro
 

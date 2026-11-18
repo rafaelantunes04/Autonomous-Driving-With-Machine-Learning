@@ -10,10 +10,6 @@ class_name ControladorTeclado
 @export var acao_direita: StringName = &"ui_right"
 
 
-func _init() -> void:
-	nome_modelo = "Manual"
-
-
 func decidir(_delta: float) -> Vector2:
 	return Vector2(
 		Input.get_axis(acao_travar, acao_acelerar),

@@ -1,12 +1,12 @@
 extends Node2D
 class_name Corrida
 
-@export_group("Corrida IA")
-
+@export_group("Regras")
 @export var voltas_para_vencer: int = 5 # voltas para ganhar.
 @export var tempo_maximo: float = 270.0 # duração máxima da corrida em segundos
 @export var corridas_avaliacao: int = 10 # quantidade de corridas para comparar os modelos
 
+@export_group("Carros e pista")
 ## Se os carros se empurram uns aos outros. Precisa de partida_sobreposta = false.
 @export var colisao_entre_carros: bool = false
 
@@ -17,11 +17,15 @@ class_name Corrida
 ## true = cada corrida do campeonato usa uma pista nova.
 @export var pista_aleatoria_por_corrida: bool = true
 
+@export_group("Treino")
 ## Modo treino: um só carro, conduzido por treino_ppo.py, sem regras de corrida.
 ## Usa a cena cenas/treino.tscn.
 @export var modo_treino: bool = false
 ## Velocidade da simulação no modo treino (1 = tempo real).
 @export var velocidade_treino: float = 20.0
+
+const ESPACO_LATERAL_GRELHA := 35.0   # px entre carros lado a lado na partida em grelha
+const ESPACO_FRONTAL_GRELHA := 45.0   # px entre carros em fila
 
 # Lista de carros participantes da corrida
 var carros: Array[Carro] = []
@@ -50,12 +54,9 @@ func _ready() -> void:
 
 	# Um carro por linha: cor + script que o conduz (ControladorTeclado, ou load("res://main.py"))
 	Carro.instanciate(Color.YELLOW, ControladorTeclado, "Amarelo")
-	Carro.instanciate(Color(0.95, 0.27, 0.30), load("res://modelo_x.py"), "Vermelho")
+	Carro.instanciate(Color(0.95, 0.27, 0.30), load("res://exemplo_simples.py"), "Vermelho")
 	Carro.instanciate(Color(0.20, 0.83, 0.49), load("res://corrida_ppo.py"), "Verde")
-
-	_ligar_carros()
-	_ao_pista_alterada()
-
+	_arrancar()
 
 
 func _iniciar_treino() -> void:
@@ -64,9 +65,14 @@ func _iniciar_treino() -> void:
 	Engine.max_physics_steps_per_frame = 64
 	Engine.max_fps = 0
 	Carro.instanciate(Color(0.20, 0.83, 0.49), load("res://treino_ppo.py"), "Treino")
+	_arrancar()
+	set_physics_process(false)   # reiniciar_corrida() volta a ligá-lo
+
+
+## Liga os carros criados à corrida e põe-nos na partida.
+func _arrancar() -> void:
 	_ligar_carros()
 	_ao_pista_alterada()
-	set_physics_process(false)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -107,8 +113,8 @@ func reiniciar_corrida() -> void:
 	for i in carros.size():
 		carros[i].ativar(true)
 		carros[i].reiniciar(
-			_pista.to_global(_pista.start_position + _deslocamento_partida(i)),
-			_pista.global_rotation + _pista.start_rotation)
+			_pista.to_global(_pista.posicao_partida + _deslocamento_partida(i)),
+			_pista.global_rotation + _pista.rotacao_partida)
 
 	_hud.reiniciar_cronometro()
 	_hud.ocultar_resultado()
@@ -122,7 +128,7 @@ func gerar_pista(seed_: int) -> void:
 	if _pista.usa_path_manual():
 		reiniciar_corrida()   # a pista vem de um Path2D: não há pista nova, só recomeça
 		return
-	_pista.gerar_agora(seed_)
+	_pista.gerar(seed_, true)
 
 
 func definir_numero_corrida(numero: int) -> void:
@@ -135,7 +141,7 @@ func definir_numero_corrida(numero: int) -> void:
 ## A pista mudou (nova seed, Path2D editado): atualiza as estatísticas e recomeça.
 func _ao_pista_alterada() -> void:
 	for carro in carros:
-		carro.estatisticas.definir_pista(_pista.centerline, _pista)
+		carro.estatisticas.definir_pista(_pista.linha_central, _pista)
 	reiniciar_corrida()
 	_fit_camera()
 
@@ -144,9 +150,9 @@ func _ao_pista_alterada() -> void:
 func _deslocamento_partida(i: int) -> Vector2:
 	if partida_sobreposta:
 		return Vector2.ZERO
-	var lateral := (i - (carros.size() - 1) * 0.5) * 35.0
-	var frontal := -i * 45.0
-	return Vector2(frontal, lateral).rotated(_pista.start_rotation)
+	var lateral := (i - (carros.size() - 1) * 0.5) * ESPACO_LATERAL_GRELHA
+	var frontal := -i * ESPACO_FRONTAL_GRELHA
+	return Vector2(frontal, lateral).rotated(_pista.rotacao_partida)
 
 
 ## Regras da corrida que se aplicam a todos os carros, mais HUD e câmara.
@@ -172,7 +178,7 @@ func _ligar_carros() -> void:
 
 # Centra a câmara na pista e ajusta o zoom para caber toda no ecrã
 func _fit_camera() -> void:
-	var linha := _pista.centerline
+	var linha := _pista.linha_central
 	if linha.is_empty():
 		return
 	var rect := Rect2(linha[0], Vector2.ZERO)
@@ -209,28 +215,40 @@ func _finalizar_corrida(indice_vencedor: int = -1) -> void:
 
 	corrida_ativa = false
 	vencedor = indice_vencedor
-
 	for carro in carros:
 		carro.ativar(false)
-
 	_hud.parar_cronometro()
 
-	# Pontos: 1.º = N, 2.º = N-1, ... (mínimo 1) + 1 ponto pela melhor volta
-	var ordem := _calcular_classificacao()
-	var pontos_corrida: Array[int] = []
-	pontos_corrida.resize(carros.size())
-	pontos_corrida.fill(0)
-	for posicao in ordem.size():
-		pontos_corrida[ordem[posicao]] = maxi(carros.size() - posicao, 1)
-
+	var ordem := _indices_ordenados(_vem_antes_na_corrida)
 	var melhor_carro := _melhor_volta_carro()
-	if melhor_carro >= 0:
-		pontos_corrida[melhor_carro] += 1
-
+	var pontos_corrida := _pontos_da_corrida(ordem, melhor_carro)
 	for i in carros.size():
 		pontuacoes[i] += pontos_corrida[i]
 
-	var resumo := "Tempo da corrida: %s\n" % _formatar_tempo(tempo_corrida)
+	var teste_final := corrida_atual >= corridas_avaliacao
+	_hud.mostrar_painel_resultado(
+		"RESULTADO FINAL" if teste_final else "RESULTADO DA CORRIDA",
+		"Teste concluído" if teste_final else "Corrida %d concluída" % corrida_atual,
+		_resumo_da_corrida(ordem, pontos_corrida, melhor_carro, teste_final),
+		teste_final
+	)
+
+
+## Pontos desta corrida: 1.º = N, 2.º = N-1, ... (mínimo 1) + 1 ponto pela melhor volta.
+func _pontos_da_corrida(ordem: Array[int], melhor_carro: int) -> Array[int]:
+	var pontos: Array[int] = []
+	pontos.resize(carros.size())
+	pontos.fill(0)
+	for posicao in ordem.size():
+		pontos[ordem[posicao]] = maxi(carros.size() - posicao, 1)
+	if melhor_carro >= 0:
+		pontos[melhor_carro] += 1
+	return pontos
+
+
+## Texto do painel de resultado: classificação da corrida e, no fim do teste, a final.
+func _resumo_da_corrida(ordem: Array[int], pontos_corrida: Array[int], melhor_carro: int, teste_final: bool) -> String:
+	var resumo := "Tempo da corrida: %s\n" % EstatisticasCorrida.formatar_tempo(tempo_corrida)
 	if melhor_carro >= 0:
 		resumo += "Melhor volta: %s (+1 ponto)\n" % carros[melhor_carro].nome
 	resumo += "CLASSIFICAÇÃO DA CORRIDA %d/%d\n" % [corrida_atual, corridas_avaliacao]
@@ -239,72 +257,51 @@ func _finalizar_corrida(indice_vencedor: int = -1) -> void:
 		var indice := ordem[posicao]
 		var stats := carros[indice].estatisticas
 		resumo += "%d.º %s | +%d pontos | Total: %d | Melhor: %s | Batidas: %d\n" % [
-			posicao + 1,
-			carros[indice].nome,
-			pontos_corrida[indice],
-			pontuacoes[indice],
-			_formatar_tempo(stats.melhor_volta),
-			stats.batidas
+			posicao + 1, carros[indice].nome, pontos_corrida[indice], pontuacoes[indice],
+			EstatisticasCorrida.formatar_tempo(stats.melhor_volta), stats.batidas
 		]
 
-	var teste_final := corrida_atual >= corridas_avaliacao
 	if teste_final:
-		var ordem_pontos := _calcular_classificacao_pontos()
 		resumo += "\nCLASSIFICAÇÃO FINAL DO TESTE\n"
+		var ordem_pontos := _indices_ordenados(_vem_antes_nos_pontos)
 		for posicao in ordem_pontos.size():
 			var indice := ordem_pontos[posicao]
-			resumo += "%d.º %s | %d pontos\n" % [
-				posicao + 1,
-				carros[indice].nome,
-				pontuacoes[indice]
-			]
-
-	_hud.mostrar_painel_resultado(
-		"RESULTADO FINAL" if teste_final else "RESULTADO DA CORRIDA",
-		"Teste concluído" if teste_final else "Corrida %d concluída" % corrida_atual,
-		resumo,
-		teste_final
-	)
+			resumo += "%d.º %s | %d pontos\n" % [posicao + 1, carros[indice].nome, pontuacoes[indice]]
+	return resumo
 
 
-## Índices dos carros por ordem: mais voltas primeiro, depois melhor volta.
-func _calcular_classificacao() -> Array[int]:
+## Índices dos carros ordenados por `vem_antes(a, b) -> bool`.
+func _indices_ordenados(vem_antes: Callable) -> Array[int]:
 	var ordem: Array[int] = []
 	for i in carros.size():
 		ordem.append(i)
-
-	ordem.sort_custom(
-		func(a: int, b: int) -> bool:
-			var stats_a := carros[a].estatisticas
-			var stats_b := carros[b].estatisticas
-			if stats_a.voltas != stats_b.voltas:
-				return stats_a.voltas > stats_b.voltas
-			if stats_a.melhor_volta < 0.0:
-				return false
-			if stats_b.melhor_volta < 0.0:
-				return true
-			if stats_a.melhor_volta == stats_b.melhor_volta:
-				return a < b
-			return stats_a.melhor_volta < stats_b.melhor_volta
-	)
+	ordem.sort_custom(vem_antes)
 	return ordem
 
 
-## Índices dos carros por ordem de pontos acumulados no campeonato.
-func _calcular_classificacao_pontos() -> Array[int]:
-	var ordem: Array[int] = []
-	for i in carros.size():
-		ordem.append(i)
+## Na corrida: mais voltas primeiro, depois melhor volta (quem ainda não tem, fica atrás).
+func _vem_antes_na_corrida(a: int, b: int) -> bool:
+	var stats_a := carros[a].estatisticas
+	var stats_b := carros[b].estatisticas
+	if stats_a.voltas != stats_b.voltas:
+		return stats_a.voltas > stats_b.voltas
+	if stats_a.melhor_volta < 0.0:
+		return false
+	if stats_b.melhor_volta < 0.0:
+		return true
+	if stats_a.melhor_volta == stats_b.melhor_volta:
+		return a < b
+	return stats_a.melhor_volta < stats_b.melhor_volta
 
-	ordem.sort_custom(
-		func(a: int, b: int) -> bool:
-			if pontuacoes[a] == pontuacoes[b]:
-				return a < b
-			return pontuacoes[a] > pontuacoes[b]
-	)
-	return ordem
+
+## No campeonato: mais pontos primeiro.
+func _vem_antes_nos_pontos(a: int, b: int) -> bool:
+	if pontuacoes[a] == pontuacoes[b]:
+		return a < b
+	return pontuacoes[a] > pontuacoes[b]
 
 
+## Índice do carro com a melhor volta, ou -1 se ninguém completou uma volta.
 func _melhor_volta_carro() -> int:
 	var melhor_tempo := INF
 	var melhor_carro := -1
@@ -314,9 +311,3 @@ func _melhor_volta_carro() -> int:
 			melhor_tempo = tempo
 			melhor_carro = i
 	return melhor_carro
-
-
-func _formatar_tempo(tempo: float) -> String:
-	if tempo < 0.0:
-		return "--:--.---"
-	return "%02d:%06.3f" % [int(tempo / 60.0), fmod(tempo, 60.0)]
