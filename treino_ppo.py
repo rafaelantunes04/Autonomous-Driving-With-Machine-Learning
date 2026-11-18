@@ -25,7 +25,7 @@ import queue
 import shutil
 import threading
 import traceback
-
+import torch
 import torch
 from py4godot.classes import gdclass
 from py4godot.classes.Node import Node
@@ -71,6 +71,7 @@ def _criar_modelo(env, nome_modelo, pasta):
 	os.makedirs(os.path.join(pasta, "logs"), exist_ok=True)
 	env = Monitor(env, filename=os.path.join(pasta, "logs", nome_modelo + "_episodios.csv"))
 
+	kwargs = {"verbose": 1, "seed": 42, "device": DISPOSITIVO}
 	kwargs = {"verbose": 1, "seed": 42, "device": DISPOSITIVO}
 	try:
 		import tensorboard  # noqa: F401
