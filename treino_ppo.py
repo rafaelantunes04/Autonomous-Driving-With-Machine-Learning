@@ -34,7 +34,8 @@ from carro_treino_api import CarroTreinoAPI
 from constantes import FRAMES_POR_ACAO, pasta_do_projeto
 from modelos_io import carregar_estado, carregar_json, guardar
 
-DISPOSITIVO = "cuda" if torch.cuda.is_available() else "cpu"
+DISPOSITIVO = ""
+
 
 
 class Estado(enum.Enum):
@@ -52,8 +53,14 @@ def _ler_configuracao():
 	}
 
 
+def _escolher_dispositivo(nome_modelo):
+	if nome_modelo == "ppo_mlp":
+		return "cpu"
+	return "cuda" if torch.cuda.is_available() else "cpu"
+
 def _criar_modelo(env, nome_modelo, pasta):
 	"""Cria o modelo SB3 escolhido, com o Monitor e (se houver) o tensorboard."""
+	
 	from stable_baselines3 import PPO, SAC
 	from stable_baselines3.common.monitor import Monitor
 	from sb3_contrib import RecurrentPPO
@@ -71,7 +78,7 @@ def _criar_modelo(env, nome_modelo, pasta):
 	os.makedirs(os.path.join(pasta, "logs"), exist_ok=True)
 	env = Monitor(env, filename=os.path.join(pasta, "logs", nome_modelo + "_episodios.csv"))
 
-	kwargs = {"verbose": 1, "seed": 42, "device": DISPOSITIVO}
+	DISPOSITIVO = _escolher_dispositivo(nome_modelo)
 	kwargs = {"verbose": 1, "seed": 42, "device": DISPOSITIVO}
 	try:
 		import tensorboard  # noqa: F401
@@ -141,6 +148,7 @@ class treino_ppo(Node):
 		from ambiente_interno import AmbienteInterno, TreinoInterrompido
 
 		print("[treino_ppo] a utilizar o dispositivo:", DISPOSITIVO.upper(), flush=True)
+		print("[DEBUG] Torch path:", torch.__file__, "| Version:", torch.__version__, flush=True)
 		self.carro = CarroTreinoAPI(self.get_parent())
 		self.q_cmd = queue.Queue()
 		self.q_res = queue.Queue()
