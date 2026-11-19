@@ -34,7 +34,7 @@ from carro_treino_api import CarroTreinoAPI
 from constantes import FRAMES_POR_ACAO, pasta_do_projeto
 from modelos_io import carregar_estado, carregar_json, guardar
 
-DISPOSITIVO = ""
+
 
 
 
@@ -78,8 +78,8 @@ def _criar_modelo(env, nome_modelo, pasta):
 	os.makedirs(os.path.join(pasta, "logs"), exist_ok=True)
 	env = Monitor(env, filename=os.path.join(pasta, "logs", nome_modelo + "_episodios.csv"))
 
-	DISPOSITIVO = _escolher_dispositivo(nome_modelo)
-	kwargs = {"verbose": 1, "seed": 42, "device": DISPOSITIVO}
+	dispositivo = _escolher_dispositivo(nome_modelo)
+	kwargs = {"verbose": 1, "seed": 42, "device": dispositivo}
 	try:
 		import tensorboard  # noqa: F401
 		kwargs["tensorboard_log"] = os.path.join(pasta, "logs", "tensorboard")
@@ -146,8 +146,9 @@ class treino_ppo(Node):
 
 	def _ready(self) -> None:
 		from ambiente_interno import AmbienteInterno, TreinoInterrompido
-
-		print("[treino_ppo] a utilizar o dispositivo:", DISPOSITIVO.upper(), flush=True)
+		config = _ler_configuracao()
+		dispositivo = _escolher_dispositivo(config["modelo"])
+		print("[treino_ppo] a utilizar o dispositivo:", dispositivo.upper(), flush=True)
 		print("[DEBUG] Torch path:", torch.__file__, "| Version:", torch.__version__, flush=True)
 		self.carro = CarroTreinoAPI(self.get_parent())
 		self.q_cmd = queue.Queue()
