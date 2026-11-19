@@ -150,11 +150,11 @@ As 7 observações (velocidade, ângulo das rodas e 5 raycasts) são calculadas 
 
 ### 3.6 Treinar um modelo (dentro do Godot, sem TCP)
 
-O treino corre na cena `cenas/treino.tscn`: só há um carro, conduzido por `treino_ppo.py`. O SB3 corre numa thread do Python do py4godot e o jogo faz de simulador (recompensa e fim de episódio em `scripts/rl/treino_rl.gd`).
+O treino corre na mesma cena da corrida (`cenas/track.tscn`) em modo treino: só há um carro, conduzido por `treino_ppo.py`. O SB3 corre numa thread do Python do py4godot e o jogo faz de simulador (recompensa e fim de episódio em `scripts/rl/treino_rl.gd`).
 
 1. Instala as dependências no Python do py4godot: `python download_addon.py` já o faz (ou volta a correr se falhou).
 2. Escolhe o modelo e a duração com variáveis de ambiente (opcionais): `TREINO_MODELO` = `ppo_mlp` (por omissão), `ppo_lstm` ou `sac_mlp`; `TREINO_PASSOS` = `100000` por omissão; `TREINO_CONTINUAR` = `1` para continuar a treinar a partir de `modelos/ppo_mlp.json` (só `ppo_mlp`).
-3. Abre `cenas/treino.tscn` e corre-a (F6), ou em linha de comandos: `godot --headless --path . res://cenas/treino.tscn`.
+3. Em linha de comandos: `godot --headless --path . -- --treino`. Para treinar com o editor, põe `modo_treino` a ligado no nó `Corrida` de `cenas/track.tscn` (ou *Project Settings → Application → Run → Main Run Args* = `--treino`) e corre com F5.
 4. No fim escreve os pesos em `modelos/ppo_mlp.json` (para `ppo_lstm` e `sac_mlp` guarda `modelos/<modelo>.zip` do SB3) e fecha o jogo. Um treino do zero guarda antes o modelo anterior em `modelos/ppo_mlp.anterior.json`. O `corrida_ppo.py` passa logo a usar o modelo novo.
 
 A velocidade da simulação é `velocidade_treino` no nó `Corrida` (1 = tempo real; por omissão 20). Os registos ficam em `logs/`.
@@ -237,7 +237,6 @@ Notas: um Path2D aberto é fechado automaticamente; se a curva for apertada dema
 ├── project.godot           ← configuração do projeto Godot
 ├── cenas/
 │   ├── track.tscn          ← cena principal (Corrida, Pista, câmara, HUD)
-│   ├── treino.tscn         ← cena de treino
 │   └── carro.tscn          ← cena do carro
 └── scripts/
 	├── carro/carro.gd                 ← física do carro + Carro.instanciate()

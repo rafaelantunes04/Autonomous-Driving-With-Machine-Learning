@@ -1,7 +1,7 @@
 """Controlador Python que conduz o carro com o modelo PPO treinado (via py4godot).
 
 Sem torch nem stable-baselines3: os pesos vêm de
-modelos/ppo_mlp.json (escrito pelo treino, cenas/treino.tscn) e a rede
+modelos/ppo_mlp.json (escrito pelo treino, godot --headless --path . -- --treino) e a rede
 (MLP 7 -> 64 -> 64 -> 2, tanh) é calculada aqui em Python puro.
 
 As 7 observações (velocidade, ângulo das rodas e 5 raycasts) são calculadas no Godot (scripts/rl/observacao_rl.gd) e lidas
@@ -61,7 +61,7 @@ class corrida_ppo(Node):
 
 		caminho = _procurar_pesos()
 		if caminho is None:
-			print("[corrida_ppo] não encontrei %s. Treina primeiro (cenas/treino.tscn)" % FICHEIRO_PESOS)
+			print("[corrida_ppo] não encontrei %s. Treina primeiro (godot --headless --path . -- --treino)" % FICHEIRO_PESOS)
 			return
 		rede = _carregar_rede(caminho)
 		entradas = len(rede[0]["w"][0])

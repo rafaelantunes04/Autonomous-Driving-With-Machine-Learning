@@ -19,7 +19,8 @@ class_name Corrida
 
 @export_group("Treino")
 ## Modo treino: um só carro, conduzido por treino_ppo.py, sem regras de corrida.
-## Usa a cena cenas/treino.tscn.
+## Também se ativa com o argumento de linha de comandos `-- --treino`
+## (ex.: godot --headless --path . -- --treino), sem mexer na cena.
 @export var modo_treino: bool = false
 ## Velocidade da simulação no modo treino (1 = tempo real).
 @export var velocidade_treino: float = 20.0
@@ -48,13 +49,14 @@ func _ready() -> void:
 	_pista.pista_alterada.connect(_ao_pista_alterada)
 	_hud.continuar_clicado.connect(_iniciar_proxima_corrida)
 
+	if "--treino" in OS.get_cmdline_user_args():
+		modo_treino = true
 	if modo_treino:
 		_iniciar_treino()
 		return
 
 	# Um carro por linha: cor + script que o conduz (ControladorTeclado, ou load("res://main.py"))
 	Carro.instanciate(Color.YELLOW, ControladorTeclado, "Amarelo")
-	Carro.instanciate(Color(0.95, 0.27, 0.30), load("res://exemplo_simples.py"), "Vermelho")
 	Carro.instanciate(Color(0.20, 0.83, 0.49), load("res://corrida_ppo.py"), "Verde")
 	_arrancar()
 
