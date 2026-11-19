@@ -122,3 +122,10 @@ func _concluir_volta() -> void:
 		melhor_volta = duracao
 	print("Volta %d concluída em %.2f s (batidas até agora: %d)" % [voltas, duracao, batidas])
 	volta_concluida.emit(voltas, duracao)
+
+
+## "02:05.340" a partir de segundos; "--:--.---" se ainda não há tempo (negativo).
+static func formatar_tempo(segundos: float) -> String:
+	if segundos < 0.0:
+		return "--:--.---"
+	return "%02d:%06.3f" % [int(segundos / 60.0), fmod(segundos, 60.0)]

@@ -55,11 +55,11 @@ const GRUPO_PATH := &"pista_path"
 		_pedir_reconstrucao()
 
 # Tudo em coordenadas locais da Pista
-var centerline := PackedVector2Array()
-var left_border := PackedVector2Array()
-var right_border := PackedVector2Array()
-var start_position := Vector2.ZERO
-var start_rotation := 0.0
+var linha_central := PackedVector2Array()
+var borda_esquerda := PackedVector2Array()
+var borda_direita := PackedVector2Array()
+var posicao_partida := Vector2.ZERO
+var rotacao_partida := 0.0
 
 var _modo_manual: bool = false
 var _path_gerado: Path2D
@@ -77,22 +77,18 @@ func usa_path_manual() -> bool:
 	return _modo_manual
 
 
-## Gera uma pista aleatória nova com esta seed (reconstrói no fim do frame, através
-## do setter de `semente`). Sem efeito se a pista vem de um Path2D.
-func gerar(seed_: int) -> void:
+## Gera uma pista aleatória nova com esta seed. Por omissão reconstrói no fim do
+## frame (através do setter de `semente`); com `imediato` reconstrói logo.
+## Sem efeito se a pista vem de um Path2D.
+func gerar(seed_: int, imediato: bool = false) -> void:
 	if _modo_manual:
 		return
+	if imediato:
+		_reconstrucao_pendente = true   # o setter de `semente` não agenda outra reconstrução
 	semente = seed_
-
-
-## Como gerar(), mas reconstrói logo, sem esperar pelo fim do frame.
-func gerar_agora(seed_: int) -> void:
-	if _modo_manual:
-		return
-	_reconstrucao_pendente = true   # o setter de `semente` não agenda outra reconstrução
-	semente = seed_
-	_reconstrucao_pendente = false
-	reconstruir()
+	if imediato:
+		_reconstrucao_pendente = false
+		reconstruir()
 
 
 ## Reconstrói linha central, bordas, paredes e desenho a partir do Path2D (ou do gerador).
@@ -102,19 +98,33 @@ func reconstruir() -> void:
 		push_warning("O Path2D '%s' precisa de pelo menos 3 pontos: a usar pista aleatória." % fonte.name)
 		fonte = null
 
-	var curva: Curve2D
 	_modo_manual = fonte != null
-	if _modo_manual:
-		curva = fonte.curve
-	else:
-		curva = GeradorPista.new(largura, num_pontos, raio_min, raio_max).gerar_curva(semente)
+	if not _modo_manual:
 		fonte = _garantir_path_gerado()
-		fonte.curve = curva
-	_ligar_curva(curva if _modo_manual else null)
+		fonte.curve = GeradorPista.new(largura, num_pontos, raio_min, raio_max).gerar_curva(semente)
+	_ligar_curva(fonte.curve if _modo_manual else null)
 
-	# Curva -> linha central, em coordenadas locais da Pista
+	linha_central = _linha_central_de(fonte)
+	var bordas := GeometriaPista.calcular_bordas(linha_central, largura)
+	borda_esquerda = bordas["esquerda"]
+	borda_direita = bordas["direita"]
+
+	# Ponto de partida = primeiro ponto da linha central, virado para o seguinte
+	posicao_partida = linha_central[0]
+	rotacao_partida = (linha_central[1 % linha_central.size()] - posicao_partida).angle()
+
+	_atualizar_paredes()
+	queue_redraw()
+	pista_alterada.emit()
+
+
+# ------------------------------------------------------------------ Interno
+
+## Amostra a curva do Path2D em pontos igualmente espaçados, em coordenadas locais da Pista.
+## Num Path2D desenhado avisa de curvas apertadas e roda a linha para começar no "Partida".
+func _linha_central_de(fonte: Path2D) -> PackedVector2Array:
 	var linha := PackedVector2Array()
-	for ponto in GeometriaPista.amostrar(curva):
+	for ponto in GeometriaPista.amostrar(fonte.curve):
 		linha.append(to_local(fonte.to_global(ponto)))
 
 	if _modo_manual:
@@ -123,22 +133,8 @@ func reconstruir() -> void:
 		var partida := fonte.get_node_or_null("Partida") as Node2D
 		if partida != null:
 			linha = _rodar_para_partida(linha, to_local(partida.global_position))
+	return linha
 
-	centerline = linha
-	var bordas := GeometriaPista.calcular_bordas(centerline, largura)
-	left_border = bordas["esquerda"]
-	right_border = bordas["direita"]
-
-	# Ponto de partida = primeiro ponto da linha central, virado para o seguinte
-	start_position = centerline[0]
-	start_rotation = (centerline[1 % centerline.size()] - start_position).angle()
-
-	_atualizar_paredes()
-	queue_redraw()
-	pista_alterada.emit()
-
-
-# ------------------------------------------------------------------ Interno
 
 func _encontrar_path() -> Path2D:
 	if path != null:
@@ -208,37 +204,37 @@ func _atualizar_paredes() -> void:
 		_paredes_shape = CollisionShape2D.new()
 		corpo.add_child(_paredes_shape)
 
-	var n := centerline.size()
+	var n := linha_central.size()
 	var segs := PackedVector2Array()
 	for i in n:
 		var j := (i + 1) % n
-		segs.append_array(PackedVector2Array([left_border[i], left_border[j], right_border[i], right_border[j]]))
+		segs.append_array(PackedVector2Array([borda_esquerda[i], borda_esquerda[j], borda_direita[i], borda_direita[j]]))
 	var forma := ConcavePolygonShape2D.new()
 	forma.segments = segs
 	_paredes_shape.shape = forma
 
 
 func _draw() -> void:
-	if centerline.is_empty():
+	if linha_central.is_empty():
 		return
 	# Asfalto: dois triângulos por segmento, entre as duas bordas. draw_primitive não
 	# triangula, por isso não falha com quadriláteros torcidos nas curvas apertadas
 	# (draw_colored_polygon dava "triangulation failed"), e não deixa buracos.
-	var n := centerline.size()
+	var n := linha_central.size()
 	var cor := Color(0.25, 0.25, 0.25)
 	var cores := PackedColorArray([cor, cor, cor])
 	var sem_uv := PackedVector2Array()
 	for i in n:
 		var j := (i + 1) % n
-		draw_primitive(PackedVector2Array([left_border[i], left_border[j], right_border[j]]), cores, sem_uv)
-		draw_primitive(PackedVector2Array([left_border[i], right_border[j], right_border[i]]), cores, sem_uv)
-	draw_polyline(_fechada(left_border), Color.WHITE, 3.0, true)
-	draw_polyline(_fechada(right_border), Color.WHITE, 3.0, true)
+		draw_primitive(PackedVector2Array([borda_esquerda[i], borda_esquerda[j], borda_direita[j]]), cores, sem_uv)
+		draw_primitive(PackedVector2Array([borda_esquerda[i], borda_direita[j], borda_direita[i]]), cores, sem_uv)
+	draw_polyline(_fechada(borda_esquerda), Color.WHITE, 3.0, true)
+	draw_polyline(_fechada(borda_direita), Color.WHITE, 3.0, true)
 
 	# Linha de partida
-	var t := Vector2.from_angle(start_rotation)
+	var t := Vector2.from_angle(rotacao_partida)
 	var normal := Vector2(-t.y, t.x) * largura * 0.5
-	draw_line(start_position - normal, start_position + normal, Color.YELLOW, 4.0)
+	draw_line(posicao_partida - normal, posicao_partida + normal, Color.YELLOW, 4.0)
 
 
 func _fechada(pts: PackedVector2Array) -> PackedVector2Array:

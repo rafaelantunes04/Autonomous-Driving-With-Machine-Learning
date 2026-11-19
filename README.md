@@ -54,30 +54,35 @@ O HUD mostra velocidade, direção das rodas, rumo, tempo, batidas e voltas (úl
 
 ## 3. Controlar o carro com Python
 
-Cada carro é conduzido por um **controlador**: um script que se torna nó filho do carro e lhe dá os comandos a cada tick de física. Quem escolhe o controlador de cada carro é o `_ready()` de `scripts/corrida/corrida.gd`, onde cada carro é uma linha com `Carro.instanciate(...)` (ver 4.0). Por omissão correm 3 carros controlados pelo teclado.
+Cada carro é conduzido por um **controlador**: um script que se torna nó filho do carro e lhe dá os comandos a cada tick de física. Quem escolhe o controlador de cada carro é o `_ready()` de `scripts/corrida/corrida.gd`, onde cada carro é uma linha com `Carro.instanciate(...)` (ver 4.0). Por omissão correm 3 carros: um por teclado, um com o exemplo `exemplo_simples.py` e um com o modelo PPO.
 
 Para o Python conduzir um carro:
 
 1. Abre `scripts/corrida/corrida.gd` e, no `_ready()`, troca o controlador de um carro (ou acrescenta uma linha):
    ```gdscript
-   Carro.instanciate(Carro.criar_config(Color.RED, load("res://main.py"), "Python"))
+   Carro.instanciate(Color.RED, load("res://main.py"), "Python")
    ```
-2. O segundo argumento é o script que conduz o carro: `ControladorTeclado`, um `.gd` teu, ou `load("res://main.py")`.
+2. O segundo argumento é o script que conduz o carro (o terceiro é o nome): `ControladorTeclado`, um `.gd` teu, ou `load("res://main.py")`.
 3. Corre o jogo (F5). Na consola deve aparecer `[main] pronto`.
 
 Cada participante pode ter um script diferente (outro `.py`, ou um `.gd` que herde de `ControladorCarro`). Um participante sem `controlador` fica parado.
 
-> O algoritmo de aprendizagem (e a rede neuronal, se houver) vive dentro do próprio script do controlador. Se o script tiver uma propriedade `nome_modelo` (texto), o HUD mostra-a ao lado do nome do carro.
+> O algoritmo de aprendizagem (e a rede neuronal, se houver) vive dentro do próprio script do controlador.
 
 ### 3.1 Que ficheiros editar
 
 | Ficheiro | É para editar? | Para que serve |
 |---|---|---|
 | **`main.py`** | ✅ **Sim, é aqui que trabalhas** | Contém a lógica de condução (a "inteligência" do carro) |
+| `exemplo_simples.py` | Para copiares | Exemplo mínimo de controlador (usado pelo carro Vermelho) |
 | `carro_api.py` | Só se quiseres alargar a API | Camada simples para dar comandos e ler o estado do carro |
+| `carro_treino_api.py`, `treino_ppo.py`, `modelos_io.py`, `ambiente_interno.py` | Não | Treino por reforço (ver 3.6) |
+| `corrida_ppo.py` | Não | Conduz com o modelo PPO treinado (ver 3.5) |
+| `telemetria_ui.py` | Não | Janela Tkinter de telemetria, usada pelo `main.py` |
+| `constantes.py` | Só se mudares o treino | Valores partilhados com o GDScript (ações por tick, nº de observações) |
 | `download_addon.py` | Não | Instala o py4godot |
 
-O `main.py` de exemplo apenas acelera durante 1 s, recua até aos 3,5 s e depois larga o pedal, só para demonstrar os comandos. **Apaga o conteúdo de `_physics_process` e escreve a tua lógica.**
+O `main.py` de exemplo (que também abre uma janela de telemetria; desliga-a com `USAR_TELEMETRIA = False`) apenas acelera durante 1 s, recua até aos 3,5 s e depois larga o pedal, só para demonstrar os comandos. **Apaga o conteúdo de `_physics_process` e escreve a tua lógica.**
 
 ### 3.2 Estrutura do `main.py`
 
@@ -123,13 +128,15 @@ Os valores fora do intervalo são limitados automaticamente.
 | `carro.velocidade` | km/h na direção da frente (negativa em marcha-atrás) |
 | `carro.rumo` | Graus de 0 a 360 para onde o carro aponta (0 = eixo +X) |
 | `carro.angulo_rodas` | Ângulo das rodas da frente em graus (positivo = direita) |
+| `carro.sensores` | Dicionário com os 5 raycasts (`esquerda_2`, `esquerda`, `frente`, `direita`, `direita_2`), de `0` (parede encostada) a `1` (livre) |
+| `carro.observacao` | As 7 observações que o modelo PPO usa |
 
 O carro não lê o teclado por si: só obedece ao seu controlador. Por isso, um carro conduzido por Python não precisa de desligar nada.
 
 ### 3.4 O que (ainda) **não** está disponível em Python
-Neste momento o Python **não consegue** ver a pista nem o resto do jogo: não há sensores (raios/distância às paredes), posição do carro, nº de batidas ou voltas, nem reiniciar a corrida. Para um agente de machine learning isto vai ser preciso adicionar. Como fazer, de forma simples:
+O Python vê a velocidade, o rumo, as rodas e os 5 sensores, mas **não** a posição do carro, o nº de batidas ou voltas, nem consegue reiniciar a corrida (só o treino o faz, via `CarroTreinoAPI`). Para expor mais coisas, de forma simples:
 
-1. Em `scripts/carro/carro.gd`, cria uma propriedade com *getter* de tipo simples (`float`, `int`, `bool`…), como as `estado_*` que já existem. Por exemplo `estado_em_colisao`.
+1. Em `scripts/carro/carro.gd`, cria uma propriedade com *getter* de tipo simples (`float`, `int`, `bool`…), como as `estado_*` que já existem. Por exemplo `estado_em_colisao` (o carro guarda isto em `_em_colisao`).
 2. Em `carro_api.py`, adiciona uma propriedade que a lê com `self._ler("estado_em_colisao")`.
 3. Usa-a no `main.py` com `self.carro.em_colisao`.
 
@@ -139,7 +146,7 @@ O carro também já tem `reiniciar(posicao, rotacao)` em GDScript, que podes exp
 
 `corrida_ppo.py` é um controlador py4godot (como o `main.py`) que corre a política PPO-MLP em Python puro, sem torch. Lê os pesos de `modelos/ppo_mlp.json`, que é escrito pelo treino (ver 3.6). Em `corrida.gd` o carro Verde usa `load("res://corrida_ppo.py")`. Corre o jogo (F5): na consola aparece `[corrida_ppo] pronto, pesos em ...`.
 
-As 7 observações (velocidade, ângulo das rodas e 5 raycasts) são calculadas em GDScript (`scripts/rl/observacao_rl.gd`) e lidas com `carro.observacao`. Um `ppo_mlp.json` antigo (8 entradas) já não serve: o `corrida_ppo.py` avisa e fica parado. Treina de novo, sem `TREINO_CONTINUAR`. O `modelo_x.py` continua a ser o exemplo simples.
+As 7 observações (velocidade, ângulo das rodas e 5 raycasts) são calculadas em GDScript (`scripts/rl/observacao_rl.gd`) e lidas com `carro.observacao`. Um `ppo_mlp.json` antigo (8 entradas) já não serve: o `corrida_ppo.py` avisa e fica parado. Treina de novo, sem `TREINO_CONTINUAR`. O `exemplo_simples.py` continua a ser o exemplo simples.
 
 ### 3.6 Treinar um modelo (dentro do Godot, sem TCP)
 
@@ -161,17 +168,17 @@ A velocidade da simulação é `velocidade_treino` no nó `Corrida` (1 = tempo r
 Um carro completo (física, cor, controlador e estatísticas) cria-se numa linha, no `_ready()` da `Corrida`:
 
 ```gdscript
-Carro.instanciate(Carro.criar_config(Color.YELLOW, ControladorTeclado, "Amarelo"))
-Carro.instanciate(Carro.criar_config(Color.RED, load("res://main.py"), "Python"))
-Carro.instanciate()   # sem config = carro branco de teclado
+Carro.instanciate(Color.YELLOW, ControladorTeclado, "Amarelo")
+Carro.instanciate(Color.RED, load("res://main.py"), "Python")
+Carro.instanciate()   # sem argumentos = carro branco de teclado
 ```
 
-`Carro.criar_config(cor, controlador, nome, fisica)` — só a cor e o controlador são importantes; `nome` e `fisica` (um `CarroConfig`) são opcionais. O carro é criado na cena atual (ou no nó passado em `Carro.instanciate(config, pai)`) e entra no grupo `carros`, que a `Corrida` usa para ligar o HUD e a câmara. Cada carro traz consigo o controlador (`carro.controlador`) e as estatísticas (`carro.estatisticas`: batidas, tempo, voltas).
+`Carro.instanciate(cor, script_controlador, nome)` — a cor e o script são o que importa; sem nome o carro chama-se "Carro N". O carro é criado na cena atual e entra no grupo `carros`, que a `Corrida` usa para ligar o HUD e a câmara. Cada carro traz consigo o controlador (`carro.controlador`) e as estatísticas (`carro.estatisticas`: batidas, tempo, voltas).
 
 ### 4.1 Parâmetros sem mexer em código
 Seleciona o nó e altera os valores no **Inspetor** (painel da direita).
 
-**Carro** → os parâmetros de física estão num recurso `CarroConfig` (`scripts/carro/carro_config.gd`). Podes criar um novo no Inspetor (e guardá-lo em `.tres`, uma variante por ficheiro) e passá-lo como 4.º argumento de `Carro.criar_config()`. Estão agrupados:
+**Carro** → os parâmetros de física são `@export` de `scripts/carro/carro.gd`: abre `cenas/carro.tscn`, seleciona o nó do carro e altera-os no Inspetor. Estão agrupados:
 
 | Grupo | O que controla |
 |---|---|
@@ -216,25 +223,34 @@ Notas: um Path2D aberto é fechado automaticamente; se a curva for apertada dema
 
 ```
 .
-├── main.py                 ← controlador Python (EDITAR AQUI)
+├── main.py                 ← controlador Python de exemplo, com telemetria (EDITAR AQUI)
+├── exemplo_simples.py      ← controlador Python mínimo
+├── corrida_ppo.py          ← conduz com o modelo PPO treinado
 ├── carro_api.py            ← API simples do carro para Python
+├── carro_treino_api.py     ← extensão da API só para o treino
+├── treino_ppo.py           ← treino (SB3 dentro do Godot)
+├── modelos_io.py           ← guardar/carregar pesos do modelo
+├── ambiente_interno.py     ← ambiente Gymnasium do treino
+├── telemetria_ui.py        ← janela Tkinter de telemetria
+├── constantes.py           ← valores partilhados com o GDScript
 ├── download_addon.py       ← instala o py4godot
 ├── project.godot           ← configuração do projeto Godot
 ├── cenas/
 │   ├── track.tscn          ← cena principal (Corrida, Pista, câmara, HUD)
+│   ├── treino.tscn         ← cena de treino
 │   └── carro.tscn          ← cena do carro
 └── scripts/
 	├── carro/carro.gd                 ← física do carro + Carro.instanciate()
-	├── carro/carro_config.gd          ← parâmetros do carro (resource)
 	├── carro/controlador_carro.gd     ← base dos controladores GDScript
 	├── carro/controlador_teclado.gd   ← controlador por teclado
 	├── pista/pista.gd                 ← geometria da pista (Path2D ou aleatória)
 	├── pista/gerador_pista.gd         ← geração aleatória (devolve uma Curve2D)
 	├── pista/geometria_pista.gd       ← bordas e validação da pista
 	├── pista/camara_pista.gd          ← câmara (vista geral / seguir carro)
-	├── corrida/corrida.gd             ← chama Carro.instanciate() e liga HUD e câmara
-	├── corrida/participante_config.gd ← nome, cor, config e controlador de um carro
+	├── corrida/corrida.gd             ← campeonato: cria carros, pontos, HUD e câmara
 	├── corrida/estatisticas_corrida.gd← batidas, tempo e voltas
+	├── rl/observacao_rl.gd            ← as 7 observações e a posição na pista
+	├── rl/treino_rl.gd                ← recompensa e fim de episódio
 	└── ui/hud.gd                      ← texto no ecrã
 ```
 

@@ -20,26 +20,15 @@ from py4godot.classes import gdclass
 from py4godot.classes.Node import Node
 
 from carro_api import CarroAPI
+from constantes import FICHEIRO_PESOS, FRAMES_POR_ACAO, OBSERVACOES, pasta_do_projeto
 
-FICHEIRO_PESOS = os.path.join("modelos", "ppo_mlp.json")
-FRAMES_POR_ACAO = 4   # igual ao treino
-OBSERVACOES = 7       # igual a ObservacaoRL.TAMANHO
 INTERVALO_PRINT = 1.0
 
 
 def _procurar_pesos():
-	"""Procura o JSON junto a este script e na pasta de trabalho do Godot."""
-	bases = []
-	try:
-		bases.append(os.path.dirname(os.path.abspath(__file__)))
-	except NameError:
-		pass
-	bases.append(os.getcwd())
-	for base in bases:
-		caminho = os.path.join(base, FICHEIRO_PESOS)
-		if os.path.isfile(caminho):
-			return caminho
-	return None
+	"""Caminho do JSON de pesos, ou None se ainda não houver treino."""
+	caminho = os.path.join(pasta_do_projeto(), FICHEIRO_PESOS)
+	return caminho if os.path.isfile(caminho) else None
 
 
 def _carregar_rede(caminho):
@@ -60,9 +49,6 @@ def _prever(camadas, obs):
 @gdclass
 class corrida_ppo(Node):
 	"""Nó que o Godot anexa ao carro e que o comanda a cada tick de física."""
-
-	# O HUD mostra este texto ao lado do nome do carro
-	nome_modelo = "PPO-MLP"
 
 	def _ready(self) -> None:
 		"""Liga-se ao carro (o nó pai) e carrega a rede."""
