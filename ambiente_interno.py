@@ -44,12 +44,16 @@ class AmbienteInterno(gym.Env):
 	def reset(self, *, seed=None, options=None):
 		super().reset(seed=seed)
 		s = int(seed) if seed is not None else int(self.np_random.integers(1, 2**30))
+		self.seed_episodio = s
 		res = self._pedir("reset", s)
+		res["seed"] = s
 		return np.asarray(res["obs"], dtype=np.float32), res
 
 	def step(self, action):
 		acao = np.clip(np.asarray(action, dtype=np.float32), -1, 1).reshape(-1).tolist()
 		res = self._pedir("step", acao)
+		res["seed"] = self.seed_episodio
+		res["is_success"] = res["motivo"] == "volta"
 		obs = np.asarray(res["obs"], dtype=np.float32)
 		truncado = res["terminado"] and res["motivo"] == "tempo"
 		terminou = res["terminado"] and not truncado

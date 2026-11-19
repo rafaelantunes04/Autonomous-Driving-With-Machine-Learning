@@ -11,6 +11,17 @@ def guardar(modelo, nome_modelo, destino):
 			json.dump(estado_ppo_mlp(modelo), f)
 		os.replace(tmp, destino + ".json")   # troca atómica: nunca fica um JSON a meio
 		print("[treino_ppo] pesos guardados:", destino + ".json", flush=True)
+	elif nome_modelo == "sac_mlp":
+		from sac_modelo import exportar
+		# ZIP: redes e otimizadores; replay: experiências; JSON: condução.
+		modelo.save(destino + ".tmp.zip")
+		modelo.save_replay_buffer(destino + ".replay.tmp.pkl")
+		with open(destino + ".json.tmp", "w", encoding="utf-8") as f:
+			json.dump(exportar(modelo), f, allow_nan=False)
+		os.replace(destino + ".tmp.zip", destino + ".zip")
+		os.replace(destino + ".replay.tmp.pkl", destino + ".replay.pkl")
+		os.replace(destino + ".json.tmp", destino + ".json")
+		print("[SAC] Guardados checkpoint, replay buffer e ator JSON:", destino, flush=True)
 	else:
 		modelo.save(destino)
 		print("[treino_ppo] modelo guardado:", destino + ".zip", flush=True)

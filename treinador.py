@@ -11,45 +11,54 @@ def ler_configuracao():
 		"modelo": os.environ.get("TREINO_MODELO", "ppo_mlp"),
 		"passos": int(os.environ.get("TREINO_PASSOS", "100000")),
 		"continuar": os.environ.get("TREINO_CONTINUAR", "0") == "1",
+		"seed": int(os.environ.get("TREINO_SEED", "42")),
 		"guardar_cada": int(os.environ.get("TREINO_GUARDAR_CADA_EPISODIOS", "100")),
 	}
 
 
 def _escolher_dispositivo(nome_modelo):
+	opcao = os.environ.get("TREINO_DISPOSITIVO", "auto")
+	if opcao not in ("auto", "cpu", "cuda"):
+		raise ValueError("TREINO_DISPOSITIVO deve ser auto, cpu ou cuda")
+	if opcao != "auto":
+		return opcao
 	if nome_modelo == "ppo_mlp":
 		return "cpu"
 	return "cuda" if torch.cuda.is_available() else "cpu"
 
-def _criar_modelo(env, nome_modelo, pasta):
+def _criar_modelo(env, nome_modelo, pasta, seed=42):
 	"""Cria o modelo SB3 escolhido, com o Monitor e (se houver) o tensorboard."""
 
 	from stable_baselines3 import PPO, SAC
 	from stable_baselines3.common.monitor import Monitor
-	from sb3_contrib import RecurrentPPO
+	if nome_modelo == "ppo_lstm":
+		from sb3_contrib import RecurrentPPO
 
 	modelos = {
 		"ppo_mlp": (PPO, "MlpPolicy"),
-		"ppo_lstm": (RecurrentPPO, "MlpLstmPolicy"),
+
 		"sac_mlp": (SAC, "MlpPolicy"),
 	}
+	if nome_modelo == "ppo_lstm":
+		modelos["ppo_lstm"] = (RecurrentPPO, "MlpLstmPolicy")
 	if nome_modelo not in modelos:
 		raise ValueError("TREINO_MODELO tem de ser um de: %s" % ", ".join(modelos))
 	cls, politica = modelos[nome_modelo]
 
 	os.makedirs(os.path.join(pasta, "modelos"), exist_ok=True)
 	os.makedirs(os.path.join(pasta, "logs"), exist_ok=True)
-	env = Monitor(env, filename=os.path.join(pasta, "logs", nome_modelo + "_episodios.csv"))
+	env = Monitor(env, filename=os.path.join(pasta, "logs", nome_modelo + "_episodios.csv"), info_keywords=("seed", "is_success", "motivo"))
 
 	dispositivo = _escolher_dispositivo(nome_modelo)
 	print("[treinador] Dispositivo:", dispositivo.upper(), flush=True)
-	kwargs = {"verbose": 1, "seed": 42, "device": dispositivo}
+	kwargs = {"verbose": 1, "seed": seed, "device": dispositivo}
 	try:
 		import tensorboard  # noqa: F401
 		kwargs["tensorboard_log"] = os.path.join(pasta, "logs", "tensorboard")
 	except ImportError:
 		pass
 	if nome_modelo == "sac_mlp":
-		kwargs.update({"learning_starts": 1000, "buffer_size": 100_000})
+		kwargs.update({"learning_starts": 1000, "buffer_size": 100_000, "batch_size": 256, "learning_rate": 3e-4, "train_freq": 1, "gradient_steps": 1, "gamma": 0.99, "tau": 0.005, "ent_coef": "auto", "policy_kwargs": {"net_arch": [256, 256]}})
 	else:
 		kwargs.update({"n_steps": 1024, "batch_size": 64})
 	return cls(politica, env, **kwargs)
@@ -57,6 +66,20 @@ def _criar_modelo(env, nome_modelo, pasta):
 
 def _preparar_ficheiro(modelo, nome_modelo, destino, continuar):
 	"""Continua a partir do JSON guardado, ou faz backup do modelo antigo antes de treinar do zero."""
+	if nome_modelo == "sac_mlp":
+		if continuar:
+			from stable_baselines3 import SAC
+			for ext in (".zip", ".replay.pkl"):
+				if not os.path.isfile(destino + ext):
+					raise FileNotFoundError("Falta ficheiro para retomar SAC: " + destino + ext)
+			novo = SAC.load(destino + ".zip", env=modelo.get_env(), device=modelo.device)
+			novo.load_replay_buffer(destino + ".replay.pkl")
+			print("[SAC] Retomado aos", novo.num_timesteps, "passos", flush=True)
+			return novo
+		for ext in (".zip", ".replay.pkl", ".json"):
+			if os.path.isfile(destino + ext):
+				shutil.copyfile(destino + ext, destino + ".anterior" + ext)
+		return modelo
 	if continuar:
 		if nome_modelo != "ppo_mlp":
 			raise ValueError("TREINO_CONTINUAR só funciona com o ppo_mlp")
@@ -64,6 +87,8 @@ def _preparar_ficheiro(modelo, nome_modelo, destino, continuar):
 		print("[treinador] a continuar a partir de", destino + ".json", flush=True)
 	elif nome_modelo == "ppo_mlp" and os.path.isfile(destino + ".json"):
 		shutil.copyfile(destino + ".json", destino + ".anterior.json")   # o guardado final escreve por cima
+
+	return modelo
 
 
 def _criar_callback(nome_modelo, destino, cada):
@@ -91,14 +116,19 @@ def _criar_callback(nome_modelo, destino, cada):
 
 def treinar(env, config, pasta):
 	"""Corre na thread de treino."""
+	pasta = os.environ.get("TREINO_PASTA_SAIDA", pasta)
 	nome = config["modelo"]
-	modelo = _criar_modelo(env, nome, pasta)
+	modelo = _criar_modelo(env, nome, pasta, config.get("seed", 42))
 	destino = os.path.join(pasta, "modelos", nome)
-	_preparar_ficheiro(modelo, nome, destino, config["continuar"])
+	try:
+		modelo = _preparar_ficheiro(modelo, nome, destino, config["continuar"])
+	except Exception:
+		modelo.get_env().close()
+		raise
 
 	callback = _criar_callback(nome, destino, config["guardar_cada"]) if config["guardar_cada"] > 0 else None
 	try:
-		modelo.learn(total_timesteps=config["passos"], callback=callback, progress_bar=False)
+		modelo.learn(total_timesteps=config["passos"], callback=callback, progress_bar=False, reset_num_timesteps=not (config["continuar"] and nome == "sac_mlp"))
 	finally:
 		try:
 			guardar(modelo, nome, destino)

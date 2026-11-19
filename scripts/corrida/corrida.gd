@@ -22,6 +22,13 @@ class_name Corrida
 ## Também se ativa com o argumento de linha de comandos `-- --treino`
 ## (ex.: godot --headless --path . -- --treino), sem mexer na cena.
 @export var modo_treino: bool = false
+@export_enum("ppo_mlp", "sac_mlp", "ppo_lstm") var modelo_treino: String = "ppo_mlp"
+@export var treino_passos: int = 100000
+@export var treino_continuar: bool = false
+@export var treino_seed: int = 42
+@export var treino_guardar_cada: int = 100
+@export_enum("auto", "cpu", "cuda") var treino_dispositivo: String = "auto"
+@export var demonstrar_sac: bool = false
 ## Velocidade da simulação no modo treino (1 = tempo real).
 @export var velocidade_treino: float = 20.0
 
@@ -58,15 +65,20 @@ func _ready() -> void:
 	# Um carro por linha: cor + script que o conduz (ControladorTeclado, ou load("res://main.py"))
 	Carro.instanciate(Color.YELLOW, ControladorTeclado, "Amarelo")
 	Carro.instanciate(Color(0.20, 0.83, 0.49), load("res://corrida_ppo.py"), "Verde")
+	if demonstrar_sac:
+		Carro.instanciate(Color.CYAN, load("res://corrida_sac.py"), "SAC")
 	_arrancar()
 
 
 func _iniciar_treino() -> void:
 	set_physics_process(false)   # sem relógio nem fim automático da corrida
-	Engine.time_scale = velocidade_treino
+	# Mantém o delta físico de 1/60 s mesmo ao acelerar a simulação.
+	var escala := maxf(1.0, velocidade_treino)
+	Engine.physics_ticks_per_second = int(round(60.0 * escala))
+	Engine.time_scale = Engine.physics_ticks_per_second / 60.0
 	Engine.max_physics_steps_per_frame = 64
 	Engine.max_fps = 0
-	Carro.instanciate(Color(0.20, 0.83, 0.49), load("res://treino_ppo.py"), "Treino")
+	Carro.instanciate(Color.CYAN if modelo_treino == "sac_mlp" else Color(0.20, 0.83, 0.49), load("res://treino_ppo.py"), "Treino " + modelo_treino)
 	_arrancar()
 	set_physics_process(false)   # reiniciar_corrida() volta a ligá-lo
 
@@ -123,9 +135,9 @@ func reiniciar_corrida() -> void:
 
 
 ## Gera uma pista nova já (a pista é reconstruída e os carros voltam à partida
-## antes de a função devolver). Com pista_aleatoria_por_corrida a seed é sorteada.
-func gerar_pista(seed_: int) -> void:
-	if pista_aleatoria_por_corrida:
+## antes de a função devolver). Uma seed explícita é sempre respeitada.
+func gerar_pista(seed_: int = -1) -> void:
+	if seed_ < 0:
 		seed_ = randi() % 100000
 	if _pista.usa_path_manual():
 		reiniciar_corrida()   # a pista vem de um Path2D: não há pista nova, só recomeça
@@ -208,7 +220,7 @@ func _iniciar_proxima_corrida() -> void:
 
 	corrida_atual += 1
 	_hud.atualizar_numero_corrida(corrida_atual)
-	gerar_pista(_pista.semente)   # reinicia a corrida e esconde o painel
+	gerar_pista(-1 if pista_aleatoria_por_corrida else _pista.semente)   # reinicia a corrida e esconde o painel
 
 
 func _finalizar_corrida(indice_vencedor: int = -1) -> void:

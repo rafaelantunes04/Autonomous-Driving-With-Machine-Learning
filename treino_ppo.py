@@ -1,4 +1,5 @@
 """Ponte Godot/treino; nome mantido por compatibilidade com as cenas."""
+import os
 import enum
 import queue
 import threading
@@ -30,6 +31,18 @@ class treino_ppo(Node):
 		self.a_sair = False
 
 		from treinador import ler_configuracao
+		# O os.environ do Python embutido pode não refletir OS.set_environment.
+		# Lê as opções diretamente do nó da cena, na thread do Godot.
+		corrida = self.get_parent().get_parent()
+		for variavel, propriedade in (
+			("TREINO_MODELO", "modelo_treino"),
+			("TREINO_PASSOS", "treino_passos"),
+			("TREINO_SEED", "treino_seed"),
+			("TREINO_GUARDAR_CADA_EPISODIOS", "treino_guardar_cada"),
+			("TREINO_DISPOSITIVO", "treino_dispositivo"),
+		):
+			os.environ[variavel] = str(corrida.get(propriedade))
+		os.environ["TREINO_CONTINUAR"] = "1" if corrida.get("treino_continuar") else "0"
 		config = ler_configuracao()
 		env = AmbienteInterno(self.q_cmd, self.q_res, self.parar)
 

@@ -109,6 +109,7 @@ var estado_rumo: float:             ## graus, 0 a 360 (0 = +X)
 var _observacao_rl: ObservacaoRL
 var _obs_cache := PackedFloat32Array()
 var _obs_tick: int = -1
+var episodio_id: int = 0
 
 
 ## Cria à primeira chamada o ObservacaoRL (precisa da Pista, irmã deste nó).
@@ -260,6 +261,8 @@ func permitir_colisao_entre_carros(ativo: bool) -> void:
 
 ## Coloca o carro parado numa posição/rotação global, sem herdar estado anterior.
 func reiniciar(nova_posicao: Vector2, nova_rotacao: float) -> void:
+	episodio_id += 1
+	invalidar_observacao()
 	global_position = nova_posicao
 	global_rotation = nova_rotacao
 	velocity = Vector2.ZERO

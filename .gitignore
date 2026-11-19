@@ -5,3 +5,7 @@ addons/
 *.tmp
 .venv/
 logs/
+
+.validation/
+modelos/*.anterior.*
+modelos/*.replay.pkl
