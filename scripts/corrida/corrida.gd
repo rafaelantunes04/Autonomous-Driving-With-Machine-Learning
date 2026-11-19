@@ -54,7 +54,6 @@ func _ready() -> void:
 
 	# Um carro por linha: cor + script que o conduz (ControladorTeclado, ou load("res://main.py"))
 	Carro.instanciate(Color.YELLOW, ControladorTeclado, "Amarelo")
-	Carro.instanciate(Color(0.95, 0.27, 0.30), load("res://exemplo_simples.py"), "Vermelho")
 	Carro.instanciate(Color(0.20, 0.83, 0.49), load("res://corrida_ppo.py"), "Verde")
 	_arrancar()
 

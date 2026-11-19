@@ -8,7 +8,6 @@
 [node name="Corrida" type="Node2D" unique_id=384909941]
 script = ExtResource("1_corrida")
 modo_treino = true
-velocidade_treino = 100.0
 
 [node name="Pista" type="Node2D" parent="." unique_id=1872404368]
 script = ExtResource("6_pista")
