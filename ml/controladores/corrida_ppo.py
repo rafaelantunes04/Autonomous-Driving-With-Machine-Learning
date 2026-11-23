@@ -1,7 +1,7 @@
 """Controlador Python que conduz o carro com o modelo PPO treinado (via py4godot).
 
 Sem torch nem stable-baselines3: os pesos vêm de
-modelos/ppo_mlp.json (escrito pelo treino, godot --headless --path . -- --treino) e a rede
+ml/pesos/ppo_mlp.json (escrito pelo treino, godot --headless --path . -- --treino) e a rede
 (MLP 7 -> 64 -> 64 -> 2, tanh) é calculada aqui em Python puro.
 
 As 7 observações (velocidade, ângulo das rodas e 5 raycasts) são calculadas no Godot (scripts/rl/observacao_rl.gd) e lidas
@@ -16,18 +16,29 @@ import json
 import math
 import os
 
+import os
+import sys
+
+# Garante que a pasta do projeto está no sys.path para `from ml... import` funcionar.
+try:
+	_RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+except NameError:
+	_RAIZ = os.getcwd()
+if _RAIZ not in sys.path:
+	sys.path.insert(0, _RAIZ)
+
 from py4godot.classes import gdclass
 from py4godot.classes.Node import Node
 
-from carro_api import CarroAPI
-from constantes import FICHEIRO_PESOS, FRAMES_POR_ACAO, OBSERVACOES, pasta_do_projeto
+from ml.ambiente.carro_api import CarroAPI
+from ml.constantes import FICHEIRO_PESOS, FRAMES_POR_ACAO, OBSERVACOES, pasta_ml
 
 INTERVALO_PRINT = 1.0
 
 
 def _procurar_pesos():
 	"""Caminho do JSON de pesos, ou None se ainda não houver treino."""
-	caminho = os.path.join(pasta_do_projeto(), FICHEIRO_PESOS)
+	caminho = os.path.join(pasta_ml(), FICHEIRO_PESOS)
 	return caminho if os.path.isfile(caminho) else None
 
 

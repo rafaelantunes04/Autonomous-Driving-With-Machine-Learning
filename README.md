@@ -75,11 +75,11 @@ Cada participante pode ter um script diferente (outro `.py`, ou um `.gd` que her
 |---|---|---|
 | **`main.py`** | ✅ **Sim, é aqui que trabalhas** | Contém a lógica de condução (a "inteligência" do carro) |
 | `exemplo_simples.py` | Para copiares | Exemplo mínimo de controlador (usado pelo carro Vermelho) |
-| `carro_api.py` | Só se quiseres alargar a API | Camada simples para dar comandos e ler o estado do carro |
-| `carro_treino_api.py`, `treino_ppo.py`, `modelos_io.py`, `ambiente_interno.py` | Não | Treino por reforço (ver 3.6) |
-| `corrida_ppo.py` | Não | Conduz com o modelo PPO treinado (ver 3.5) |
+| `ml/ambiente/carro_api.py` | Só se quiseres alargar a API | Camada simples para dar comandos e ler o estado do carro |
+| `ml/` (ver `ml/README.md`) | Não | Treino por reforço, modelos e pesos (ver 3.6) |
+| `ml/controladores/corrida_ppo.py` | Não | Conduz com o modelo PPO treinado (ver 3.5) |
 | `telemetria_ui.py` | Não | Janela Tkinter de telemetria, usada pelo `main.py` |
-| `constantes.py` | Só se mudares o treino | Valores partilhados com o GDScript (ações por tick, nº de observações) |
+| `ml/constantes.py` | Só se mudares o treino | Valores partilhados com o GDScript (ações por tick, nº de observações) |
 | `download_addon.py` | Não | Instala o py4godot |
 
 O `main.py` de exemplo (que também abre uma janela de telemetria; desliga-a com `USAR_TELEMETRIA = False`) apenas acelera durante 1 s, recua até aos 3,5 s e depois larga o pedal, só para demonstrar os comandos. **Apaga o conteúdo de `_physics_process` e escreve a tua lógica.**
@@ -144,20 +144,20 @@ O carro também já tem `reiniciar(posicao, rotacao)` em GDScript, que podes exp
 
 ### 3.5 Conduzir com o modelo PPO treinado
 
-`corrida_ppo.py` é um controlador py4godot (como o `main.py`) que corre a política PPO-MLP em Python puro, sem torch. Lê os pesos de `modelos/ppo_mlp.json`, que é escrito pelo treino (ver 3.6). Em `corrida.gd` o carro Verde usa `load("res://corrida_ppo.py")`. Corre o jogo (F5): na consola aparece `[corrida_ppo] pronto, pesos em ...`.
+`ml/controladores/corrida_ppo.py` é um controlador py4godot (como o `main.py`) que corre a política PPO-MLP em Python puro, sem torch. Lê os pesos de `ml/pesos/ppo_mlp.json`, que é escrito pelo treino (ver 3.6). Em `corrida.gd` o carro Verde usa `load("res://ml/controladores/corrida_ppo.py")`. Corre o jogo (F5): na consola aparece `[corrida_ppo] pronto, pesos em ...`.
 
 As 7 observações (velocidade, ângulo das rodas e 5 raycasts) são calculadas em GDScript (`scripts/rl/observacao_rl.gd`) e lidas com `carro.observacao`. Um `ppo_mlp.json` antigo (8 entradas) já não serve: o `corrida_ppo.py` avisa e fica parado. Treina de novo, sem `TREINO_CONTINUAR`. O `exemplo_simples.py` continua a ser o exemplo simples.
 
 ### 3.6 Treinar um modelo (dentro do Godot, sem TCP)
 
-O treino corre na mesma cena da corrida (`cenas/track.tscn`) em modo treino: só há um carro, conduzido por `treino_ppo.py`. O SB3 corre numa thread do Python do py4godot e o jogo faz de simulador (recompensa e fim de episódio em `scripts/rl/treino_rl.gd`).
+O treino corre na mesma cena da corrida (`cenas/track.tscn`) em modo treino: só há um carro, conduzido por `ml/controladores/treino_ppo.py`. O SB3 corre numa thread do Python do py4godot e o jogo faz de simulador (recompensa e fim de episódio em `scripts/rl/treino_rl.gd`).
 
 1. Instala as dependências no Python do py4godot: `python download_addon.py` já o faz (ou volta a correr se falhou).
-2. Escolhe o modelo e a duração com variáveis de ambiente (opcionais): `TREINO_MODELO` = `ppo_mlp` (por omissão), `ppo_lstm` ou `sac_mlp`; `TREINO_PASSOS` = `100000` por omissão; `TREINO_CONTINUAR` = `1` para continuar a treinar a partir de `modelos/ppo_mlp.json` (só `ppo_mlp`).
+2. Escolhe o modelo e a duração com variáveis de ambiente (opcionais): `TREINO_MODELO` = `ppo_mlp` (por omissão), `ppo_lstm` ou `sac_mlp`; `TREINO_PASSOS` = `100000` por omissão; `TREINO_CONTINUAR` = `1` para continuar a treinar a partir de `ml/pesos/ppo_mlp.json` (só `ppo_mlp`).
 3. Em linha de comandos: `godot --headless --path . -- --treino`. Para treinar com o editor, põe `modo_treino` a ligado no nó `Corrida` de `cenas/track.tscn` (ou *Project Settings → Application → Run → Main Run Args* = `--treino`) e corre com F5.
-4. No fim escreve os pesos em `modelos/ppo_mlp.json` (para `ppo_lstm` e `sac_mlp` guarda `modelos/<modelo>.zip` do SB3) e fecha o jogo. Um treino do zero guarda antes o modelo anterior em `modelos/ppo_mlp.anterior.json`. O `corrida_ppo.py` passa logo a usar o modelo novo.
+4. No fim escreve os pesos em `ml/pesos/ppo_mlp.json` (para `ppo_lstm` e `sac_mlp` guarda `ml/pesos/<modelo>.zip` do SB3) e fecha o jogo. Um treino do zero guarda antes o modelo anterior em `ml/pesos/ppo_mlp.anterior.json`. O `corrida_ppo.py` passa logo a usar o modelo novo.
 
-A velocidade da simulação é `velocidade_treino` no nó `Corrida` (1 = tempo real; por omissão 20). Os registos ficam em `logs/`.
+A velocidade da simulação é `velocidade_treino` no nó `Corrida` (1 = tempo real; por omissão 20). Os registos ficam em `ml/logs/`.
 
 ---
 
@@ -225,14 +225,8 @@ Notas: um Path2D aberto é fechado automaticamente; se a curva for apertada dema
 .
 ├── main.py                 ← controlador Python de exemplo, com telemetria (EDITAR AQUI)
 ├── exemplo_simples.py      ← controlador Python mínimo
-├── corrida_ppo.py          ← conduz com o modelo PPO treinado
-├── carro_api.py            ← API simples do carro para Python
-├── carro_treino_api.py     ← extensão da API só para o treino
-├── treino_ppo.py           ← treino (SB3 dentro do Godot)
-├── modelos_io.py           ← guardar/carregar pesos do modelo
-├── ambiente_interno.py     ← ambiente Gymnasium do treino
 ├── telemetria_ui.py        ← janela Tkinter de telemetria
-├── constantes.py           ← valores partilhados com o GDScript
+├── ml/                     ← treino, modelos, pesos e controladores de ML (ver ml/README.md)
 ├── download_addon.py       ← instala o py4godot
 ├── project.godot           ← configuração do projeto Godot
 ├── cenas/

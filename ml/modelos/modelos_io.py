@@ -1,7 +1,7 @@
 """Leitura/escrita dos modelos. O JSON PPO guarda pesos, não o otimizador."""
 import json
 import os
-from ppo_modelo import estado_ppo_mlp, carregar_estado
+from ml.modelos.ppo_modelo import estado_ppo_mlp, carregar_estado
 
 def guardar(modelo, nome_modelo, destino):
 	"""Escreve o modelo no disco (o ppo_mlp em JSON, os outros em .zip do SB3)."""
@@ -12,7 +12,7 @@ def guardar(modelo, nome_modelo, destino):
 		os.replace(tmp, destino + ".json")   # troca atómica: nunca fica um JSON a meio
 		print("[treino_ppo] pesos guardados:", destino + ".json", flush=True)
 	elif nome_modelo == "sac_mlp":
-		from sac_modelo import exportar
+		from ml.modelos.sac_modelo import exportar
 		# ZIP: redes e otimizadores; replay: experiências; JSON: condução.
 		modelo.save(destino + ".tmp.zip")
 		modelo.save_replay_buffer(destino + ".replay.tmp.pkl")

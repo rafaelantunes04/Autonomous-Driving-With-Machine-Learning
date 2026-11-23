@@ -4,10 +4,21 @@ import enum
 import queue
 import threading
 import traceback
+import os
+import sys
+
+# Garante que a pasta do projeto está no sys.path para `from ml... import` funcionar.
+try:
+	_RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+except NameError:
+	_RAIZ = os.getcwd()
+if _RAIZ not in sys.path:
+	sys.path.insert(0, _RAIZ)
+
 from py4godot.classes import gdclass
 from py4godot.classes.Node import Node
-from carro_treino_api import CarroTreinoAPI
-from constantes import FRAMES_POR_ACAO, pasta_do_projeto
+from ml.ambiente.carro_treino_api import CarroTreinoAPI
+from ml.constantes import FRAMES_POR_ACAO, pasta_ml
 
 class Estado(enum.Enum):
 	ESPERA = 0     # à espera de um comando do SB3
@@ -19,7 +30,7 @@ class treino_ppo(Node):
 	"""Nó filho do carro: faz de simulador para o treino (thread de física do Godot)."""
 
 	def _ready(self) -> None:
-		from ambiente_interno import AmbienteInterno, TreinoInterrompido
+		from ml.ambiente.ambiente_interno import AmbienteInterno, TreinoInterrompido
 
 		self.carro = CarroTreinoAPI(self.get_parent())
 		self.q_cmd = queue.Queue()
@@ -30,7 +41,7 @@ class treino_ppo(Node):
 		self.frames = 0
 		self.a_sair = False
 
-		from treinador import ler_configuracao
+		from ml.treino.treinador import ler_configuracao
 		# O os.environ do Python embutido pode não refletir OS.set_environment.
 		# Lê as opções diretamente do nó da cena, na thread do Godot.
 		corrida = self.get_parent().get_parent()
@@ -48,8 +59,8 @@ class treino_ppo(Node):
 
 		def correr():
 			try:
-				from treinador import treinar
-				treinar(env, config, pasta_do_projeto())
+				from ml.treino.treinador import treinar
+				treinar(env, config, pasta_ml())
 			except TreinoInterrompido:
 				print("[treino_ppo] interrompido", flush=True)
 			except Exception:

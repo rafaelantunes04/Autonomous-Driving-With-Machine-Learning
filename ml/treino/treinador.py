@@ -3,7 +3,8 @@ import os
 import shutil
 import traceback
 import torch
-from modelos_io import carregar_estado, carregar_json, guardar
+from ml.constantes import pasta_logs, pasta_pesos
+from ml.modelos.modelos_io import carregar_estado, carregar_json, guardar
 
 def ler_configuracao():
 	"""Lê as variáveis de ambiente TREINO_*."""
@@ -45,16 +46,16 @@ def _criar_modelo(env, nome_modelo, pasta, seed=42):
 		raise ValueError("TREINO_MODELO tem de ser um de: %s" % ", ".join(modelos))
 	cls, politica = modelos[nome_modelo]
 
-	os.makedirs(os.path.join(pasta, "modelos"), exist_ok=True)
-	os.makedirs(os.path.join(pasta, "logs"), exist_ok=True)
-	env = Monitor(env, filename=os.path.join(pasta, "logs", nome_modelo + "_episodios.csv"), info_keywords=("seed", "is_success", "motivo"))
+	os.makedirs(pasta_pesos(pasta), exist_ok=True)
+	os.makedirs(pasta_logs(pasta), exist_ok=True)
+	env = Monitor(env, filename=os.path.join(pasta_logs(pasta), nome_modelo + "_episodios.csv"), info_keywords=("seed", "is_success", "motivo"))
 
 	dispositivo = _escolher_dispositivo(nome_modelo)
 	print("[treinador] Dispositivo:", dispositivo.upper(), flush=True)
 	kwargs = {"verbose": 1, "seed": seed, "device": dispositivo}
 	try:
 		import tensorboard  # noqa: F401
-		kwargs["tensorboard_log"] = os.path.join(pasta, "logs", "tensorboard")
+		kwargs["tensorboard_log"] = os.path.join(pasta_logs(pasta), "tensorboard")
 	except ImportError:
 		pass
 	if nome_modelo == "sac_mlp":
@@ -115,11 +116,11 @@ def _criar_callback(nome_modelo, destino, cada):
 
 
 def treinar(env, config, pasta):
-	"""Corre na thread de treino."""
+	"""Corre na thread de treino. `pasta` é a pasta de saída: contém pesos/ e logs/ (por omissão, ml/)."""
 	pasta = os.environ.get("TREINO_PASTA_SAIDA", pasta)
 	nome = config["modelo"]
 	modelo = _criar_modelo(env, nome, pasta, config.get("seed", 42))
-	destino = os.path.join(pasta, "modelos", nome)
+	destino = os.path.join(pasta_pesos(pasta), nome)
 	try:
 		modelo = _preparar_ficheiro(modelo, nome, destino, config["continuar"])
 	except Exception:

@@ -1,10 +1,21 @@
 """Condução SAC determinística, com os pesos JSON e sem PyTorch."""
 import os
+import os
+import sys
+
+# Garante que a pasta do projeto está no sys.path para `from ml... import` funcionar.
+try:
+    _RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+except NameError:
+    _RAIZ = os.getcwd()
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
+
 from py4godot.classes import gdclass
 from py4godot.classes.Node import Node
-from carro_api import CarroAPI
-from constantes import FRAMES_POR_ACAO, OBSERVACOES, pasta_do_projeto
-from sac_modelo import prever
+from ml.ambiente.carro_api import CarroAPI
+from ml.constantes import FRAMES_POR_ACAO, OBSERVACOES, pasta_pesos
+from ml.modelos.sac_modelo import prever
 import json
 
 @gdclass
@@ -15,9 +26,9 @@ class corrida_sac(Node):
         self.frames = 0
         self.episodio = -1
         self.acao = [0.0, 0.0]
-        caminho = os.environ.get("SAC_FICHEIRO_PESOS", os.path.join(pasta_do_projeto(), "modelos", "sac_mlp.json"))
+        caminho = os.environ.get("SAC_FICHEIRO_PESOS", os.path.join(pasta_pesos(), "sac_mlp.json"))
         if not os.path.isfile(caminho):
-            print("[SAC] Falta sac_mlp.json. Executa primeiro cenas/treino_sac.tscn.", flush=True)
+            print("[SAC] Falta sac_mlp.json. Executa primeiro cenas/track.tscn com modelo_treino = sac_mlp.", flush=True)
             self.carro.parar()
             return
         with open(caminho, encoding="utf-8") as f:

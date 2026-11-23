@@ -1,6 +1,6 @@
 """Extensão da CarroAPI só para o treino por reforço (ver scripts/rl/treino_rl.gd)."""
 
-from carro_api import CarroAPI
+from ml.ambiente.carro_api import CarroAPI
 
 # Tem de seguir a ordem do enum TreinoRL.Motivo
 MOTIVOS = ("", "batida", "volta", "tempo")

@@ -4,8 +4,9 @@ __pycache__/
 addons/
 *.tmp
 .venv/
-logs/
+ml/logs/*
+!ml/logs/.gitkeep
 
 .validation/
-modelos/*.anterior.*
-modelos/*.replay.pkl
+ml/pesos/*.anterior.*
+ml/pesos/*.replay.pkl

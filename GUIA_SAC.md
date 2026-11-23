@@ -1,6 +1,6 @@
 # SAC no Godot
 
-Abre `cenas/treino_sac.tscn` e executa com F6. No nó Corrida escolhe o número de passos, seed, dispositivo (`auto`, `cpu`, `cuda`), intervalo de gravação em episódios e se queres continuar um treino. Começa com velocidade 1. O carro de treino SAC é ciano. `auto` usa CUDA se disponível; é necessário ter testado cálculos na GPU, não apenas a sua deteção.
+Abre `cenas/track.tscn` (a cena principal) e executa com F6. No nó Corrida, grupo Treino, escolhe o modelo (`sac_mlp` para SAC, `ppo_mlp` para PPO), o número de passos, seed, dispositivo (`auto`, `cpu`, `cuda`), intervalo de gravação em episódios e se queres continuar um treino. A velocidade de treino está a 10 (`velocidade_treino`; 1 = tempo real). O carro de treino SAC é ciano. `auto` usa CUDA se disponível; é necessário ter testado cálculos na GPU, não apenas a sua deteção.
 
 Nos primeiros 1000 passos, SAC recolhe experiências com ações aleatórias; depois começa a atualizar as redes. Configuração: MLP [256, 256], batch 256, buffer 100000, learning rate 0.0003, gamma 0.99, tau 0.005, entropia automática, uma atualização por passo. Não usa pesos PPO. PPO e SAC partilham observações, ações e recompensa.
 
