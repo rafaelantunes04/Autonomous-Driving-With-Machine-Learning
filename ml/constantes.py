@@ -36,5 +36,5 @@ def pasta_pesos(saida=None):
 
 
 def pasta_logs(saida=None):
-	"""Onde ficam os registos de treino (CSV dos episódios e tensorboard)."""
+	"""Registos de treino: logs/<modelo>.csv (estatísticas por episódio) e logs/tensorboard/."""
 	return os.path.join(saida or pasta_ml(), "logs")

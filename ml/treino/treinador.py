@@ -1,6 +1,8 @@
 """Gestão de treino comum a PPO, SAC e RecurrentPPO, sem dependência do Godot."""
+import csv
 import os
 import shutil
+import time
 import traceback
 import torch
 from ml.constantes import pasta_logs, pasta_pesos
@@ -48,7 +50,8 @@ def _criar_modelo(env, nome_modelo, pasta, seed=42):
 
 	os.makedirs(pasta_pesos(pasta), exist_ok=True)
 	os.makedirs(pasta_logs(pasta), exist_ok=True)
-	env = Monitor(env, filename=os.path.join(pasta_logs(pasta), nome_modelo + "_episodios.csv"), info_keywords=("seed", "is_success", "motivo"))
+	# Sem ficheiro: o Monitor só junta as estatísticas do episódio ao `info`; o CSV é escrito por _criar_callback_csv.
+	env = Monitor(env, filename=None, info_keywords=("seed", "is_success", "motivo"))
 
 	dispositivo = _escolher_dispositivo(nome_modelo)
 	print("[treinador] Dispositivo:", dispositivo.upper(), flush=True)
@@ -115,6 +118,45 @@ def _criar_callback(nome_modelo, destino, cada):
 	return GuardarPorEpisodios()
 
 
+COLUNAS_CSV = ("episodio", "data_hora", "passos", "recompensa", "duracao_passos", "tempo_s", "seed", "sucesso", "motivo")
+
+
+def _criar_callback_csv(caminho):
+	"""Callback do SB3 que acrescenta uma linha por episódio a `caminho` (CSV simples de estatísticas do treino)."""
+	from stable_baselines3.common.callbacks import BaseCallback
+
+	class EstatisticasCSV(BaseCallback):
+		def __init__(self):
+			super().__init__()
+			self.episodio = 0
+			if os.path.isfile(caminho):   # retoma: continua a numeração
+				with open(caminho, encoding="utf-8") as f:
+					self.episodio = max(0, sum(1 for _ in f) - 1)
+
+		def _on_step(self):
+			for info in self.locals.get("infos", ()):
+				ep = info.get("episode")
+				if ep is None:
+					continue
+				self.episodio += 1
+				novo = not os.path.isfile(caminho)
+				try:
+					with open(caminho, "a", newline="", encoding="utf-8") as f:
+						w = csv.writer(f)
+						if novo:
+							w.writerow(COLUNAS_CSV)
+						w.writerow([
+							self.episodio, time.strftime("%Y-%m-%d %H:%M:%S"), self.num_timesteps,
+							round(float(ep["r"]), 4), int(ep["l"]), round(float(ep["t"]), 2),
+							ep.get("seed", ""), ep.get("is_success", ""), ep.get("motivo", ""),
+						])
+				except Exception:   # um erro a escrever o CSV não deve matar o treino
+					traceback.print_exc()
+			return True
+
+	return EstatisticasCSV()
+
+
 def treinar(env, config, pasta):
 	"""Corre na thread de treino. `pasta` é a pasta de saída: contém pesos/ e logs/ (por omissão, ml/)."""
 	pasta = os.environ.get("TREINO_PASTA_SAIDA", pasta)
@@ -127,7 +169,14 @@ def treinar(env, config, pasta):
 		modelo.get_env().close()
 		raise
 
-	callback = _criar_callback(nome, destino, config["guardar_cada"]) if config["guardar_cada"] > 0 else None
+	# Um CSV por modelo (logs/<modelo>.csv). Treinar de novo guarda o anterior como .anterior.csv; continuar acrescenta.
+	csv_estatisticas = os.path.join(pasta_logs(pasta), nome + ".csv")
+	if not config["continuar"] and os.path.isfile(csv_estatisticas):
+		shutil.move(csv_estatisticas, os.path.join(pasta_logs(pasta), nome + ".anterior.csv"))
+	callbacks = [_criar_callback_csv(csv_estatisticas)]
+	if config["guardar_cada"] > 0:
+		callbacks.append(_criar_callback(nome, destino, config["guardar_cada"]))
+	callback = callbacks
 	try:
 		modelo.learn(total_timesteps=config["passos"], callback=callback, progress_bar=False, reset_num_timesteps=not (config["continuar"] and nome == "sac_mlp"))
 	finally:
