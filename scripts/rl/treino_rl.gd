@@ -103,3 +103,7 @@ func _avanco_desde_ultimo_passo(comprimento: float) -> float:
 	_ultimo_progresso = atual
 	var limite: float = _carro.velocidade_max * FRAMES_POR_ACAO / 60.0 * MARGEM_PROGRESSO
 	return clampf(avanco, -limite, limite)
+
+
+func progresso_fracao() -> float:
+	return clampf(progresso_total / maxf(_obs.comprimento_pista(), 1.0), 0.0, 1.0)

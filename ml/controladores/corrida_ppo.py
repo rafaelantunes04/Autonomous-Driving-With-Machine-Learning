@@ -15,17 +15,14 @@ IMPORTANTE: o nome da classe tem de ser igual ao nome do ficheiro
 import json
 import math
 import os
-
-import os
 import sys
-
-# Garante que a pasta do projeto está no sys.path para `from ml... import` funcionar.
+from pathlib import Path
 try:
-	_RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    _RAIZ = str(Path(__file__).resolve().parents[2])
 except NameError:
-	_RAIZ = os.getcwd()
+    _RAIZ = os.getcwd()
 if _RAIZ not in sys.path:
-	sys.path.insert(0, _RAIZ)
+    sys.path.insert(0, _RAIZ)
 
 from py4godot.classes import gdclass
 from py4godot.classes.Node import Node
@@ -47,14 +44,7 @@ def _carregar_rede(caminho):
 		return json.load(f)["camadas"]
 
 
-def _prever(camadas, obs):
-	"""Passagem direta da rede: devolve [acelerar, virar] em [-1, 1] (política determinística)."""
-	x = obs
-	for camada in camadas:
-		x = [sum(w * v for w, v in zip(linha, x)) + b for linha, b in zip(camada["w"], camada["b"])]
-		if camada["ativacao"] == "tanh":
-			x = [math.tanh(v) for v in x]
-	return [max(-1.0, min(1.0, v)) for v in x]
+from ml.modelos.ppo_modelo import prever as _prever
 
 
 @gdclass

@@ -186,6 +186,13 @@ var rl_recompensa: float:
 	get: return _treino_rl.recompensa if _treino_rl != null else 0.0
 var rl_terminado: bool:
 	get: return _treino_rl.terminado if _treino_rl != null else false
+var rl_batidas: int:
+	get: return _treino_rl.batidas if _treino_rl != null else 0
+var rl_progresso_fracao: float:
+	get:
+		return _treino_rl.progresso_fracao() if _treino_rl != null else 0.0
+var rl_tempo_simulado: float:
+	get: return _treino_rl.passos * TreinoRL.FRAMES_POR_ACAO / 60.0 if _treino_rl != null else 0.0
 var rl_motivo: int:                    ## ver TreinoRL.Motivo: 0 nenhum, 1 batida, 2 volta, 3 tempo
 	get: return _treino_rl.motivo if _treino_rl != null else 0
 

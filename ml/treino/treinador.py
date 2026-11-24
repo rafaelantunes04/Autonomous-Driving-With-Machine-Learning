@@ -1,102 +1,243 @@
-"""Gestão de treino comum a PPO, SAC e RecurrentPPO, sem dependência do Godot."""
+"""Gestão de treino PPO, SAC e PPO-LSTM, independente do Godot."""
+
 import csv
 import os
 import shutil
-import time
 import traceback
+
 import torch
-from ml.constantes import pasta_logs, pasta_pesos
-from ml.modelos.modelos_io import carregar_estado, carregar_json, guardar
+
+from ml.modelos.modelos_io import carregar_estado, carregar_json, guardar, publicar
+from ml.treino.experiencias import nova_execucao, proveniencia, escrever_json, sha256
+from pathlib import Path
+import time
+
 
 def ler_configuracao():
-	"""Lê as variáveis de ambiente TREINO_*."""
+	"""Lê as opções de treino definidas pela ponte com o Godot."""
 	return {
 		"modelo": os.environ.get("TREINO_MODELO", "ppo_mlp"),
 		"passos": int(os.environ.get("TREINO_PASSOS", "100000")),
 		"continuar": os.environ.get("TREINO_CONTINUAR", "0") == "1",
 		"seed": int(os.environ.get("TREINO_SEED", "42")),
-		"guardar_cada": int(os.environ.get("TREINO_GUARDAR_CADA_EPISODIOS", "100")),
+		"guardar_cada": int(
+			os.environ.get("TREINO_GUARDAR_CADA_EPISODIOS", "100")
+		),
 	}
 
 
 def _escolher_dispositivo(nome_modelo):
 	opcao = os.environ.get("TREINO_DISPOSITIVO", "auto")
+
 	if opcao not in ("auto", "cpu", "cuda"):
-		raise ValueError("TREINO_DISPOSITIVO deve ser auto, cpu ou cuda")
+		raise ValueError(
+            "TREINO_DISPOSITIVO deve ser auto, cpu ou cuda"
+		)
+
 	if opcao != "auto":
 		return opcao
+
 	if nome_modelo == "ppo_mlp":
 		return "cpu"
+
 	return "cuda" if torch.cuda.is_available() else "cpu"
 
-def _criar_modelo(env, nome_modelo, pasta, seed=42):
-	"""Cria o modelo SB3 escolhido, com o Monitor e (se houver) o tensorboard."""
 
+def _criar_modelo(env, nome_modelo, pasta, seed=42):
+	"""Cria o algoritmo e configura as respetivas redes."""
 	from stable_baselines3 import PPO, SAC
 	from stable_baselines3.common.monitor import Monitor
-	if nome_modelo == "ppo_lstm":
-		from sb3_contrib import RecurrentPPO
 
 	modelos = {
 		"ppo_mlp": (PPO, "MlpPolicy"),
-
 		"sac_mlp": (SAC, "MlpPolicy"),
 	}
+
 	if nome_modelo == "ppo_lstm":
-		modelos["ppo_lstm"] = (RecurrentPPO, "MlpLstmPolicy")
+		from sb3_contrib import RecurrentPPO
+
+		modelos["ppo_lstm"] = (
+			RecurrentPPO,
+			"MlpLstmPolicy",
+		)
+
 	if nome_modelo not in modelos:
-		raise ValueError("TREINO_MODELO tem de ser um de: %s" % ", ".join(modelos))
+		raise ValueError(
+            "Modelo inválido: escolhe ppo_mlp, sac_mlp ou ppo_lstm"
+		)
+
 	cls, politica = modelos[nome_modelo]
-
-	os.makedirs(pasta_pesos(pasta), exist_ok=True)
-	os.makedirs(pasta_logs(pasta), exist_ok=True)
-	# Sem ficheiro: o Monitor só junta as estatísticas do episódio ao `info`; o CSV é escrito por _criar_callback_csv.
-	env = Monitor(env, filename=None, info_keywords=("seed", "is_success", "motivo"))
-
 	dispositivo = _escolher_dispositivo(nome_modelo)
-	print("[treinador] Dispositivo:", dispositivo.upper(), flush=True)
-	kwargs = {"verbose": 1, "seed": seed, "device": dispositivo}
+
+	os.makedirs(os.path.join(pasta, "modelos"), exist_ok=True)
+	os.makedirs(os.path.join(pasta, "logs"), exist_ok=True)
+
+	env = Monitor(
+		env,
+		filename=None,
+		info_keywords=("seed", "is_success", "motivo"),
+	)
+
+	print(
+		f"[treinador] Modelo: {nome_modelo} | "
+		f"Dispositivo: {dispositivo.upper()}",
+		flush=True,
+	)
+
+	kwargs = {
+		"verbose": 1,
+		"seed": seed,
+		"device": dispositivo,
+	}
+
 	try:
 		import tensorboard  # noqa: F401
-		kwargs["tensorboard_log"] = os.path.join(pasta_logs(pasta), "tensorboard")
+
+		kwargs["tensorboard_log"] = os.path.join(
+			pasta, "logs", "tensorboard"
+		)
 	except ImportError:
 		pass
+
 	if nome_modelo == "sac_mlp":
-		kwargs.update({"learning_starts": 1000, "buffer_size": 100_000, "batch_size": 256, "learning_rate": 3e-4, "train_freq": 1, "gradient_steps": 1, "gamma": 0.99, "tau": 0.005, "ent_coef": "auto", "policy_kwargs": {"net_arch": [256, 256]}})
+		kwargs.update({
+			"learning_starts": 1000,
+			"buffer_size": 100_000,
+			"batch_size": 256,
+			"learning_rate": 3e-4,
+			"train_freq": 1,
+			"gradient_steps": 1,
+			"gamma": 0.99,
+			"tau": 0.005,
+			"ent_coef": "auto",
+			"policy_kwargs": {
+				"net_arch": [256, 256],
+			},
+		})
+
+	elif nome_modelo == "ppo_lstm":
+		kwargs.update({
+			"learning_rate": 3e-4,
+			"n_steps": 1024,
+			"batch_size": 64,
+			"n_epochs": 10,
+			"gamma": 0.99,
+			"gae_lambda": 0.95,
+			"clip_range": 0.2,
+			"policy_kwargs": {
+				"lstm_hidden_size": 128,
+				"n_lstm_layers": 1,
+				"shared_lstm": False,
+				"enable_critic_lstm": True,
+				"net_arch": {
+					"pi": [64, 64],
+					"vf": [64, 64],
+				},
+			},
+		})
+
 	else:
-		kwargs.update({"n_steps": 1024, "batch_size": 64})
-	return cls(politica, env, **kwargs)
+		# PPO com MLP: mantém a configuração existente.
+		kwargs.update({
+			"n_steps": 1024,
+			"batch_size": 64,
+		})
+
+	try:
+		return cls(politica, env, **kwargs)
+	except Exception:
+		env.close()
+		raise
+
+
+def _fazer_backup(destino, extensoes):
+	"""Preserva a versão anterior antes de começar do zero."""
+	for extensao in extensoes:
+		origem = destino + extensao
+
+		if os.path.isfile(origem):
+			shutil.copyfile(
+				origem,
+				destino + ".anterior" + extensao,
+			)
 
 
 def _preparar_ficheiro(modelo, nome_modelo, destino, continuar):
-	"""Continua a partir do JSON guardado, ou faz backup do modelo antigo antes de treinar do zero."""
+	"""Carrega um treino anterior ou preserva os ficheiros existentes."""
 	if nome_modelo == "sac_mlp":
 		if continuar:
 			from stable_baselines3 import SAC
-			for ext in (".zip", ".replay.pkl"):
-				if not os.path.isfile(destino + ext):
-					raise FileNotFoundError("Falta ficheiro para retomar SAC: " + destino + ext)
-			novo = SAC.load(destino + ".zip", env=modelo.get_env(), device=modelo.device)
+
+			for extensao in (".zip", ".replay.pkl"):
+				if not os.path.isfile(destino + extensao):
+					raise FileNotFoundError(
+                        "Falta ficheiro para retomar SAC: "
+						+ destino + extensao
+					)
+
+			novo = SAC.load(
+				destino + ".zip",
+				env=modelo.get_env(),
+				device=modelo.device,
+			)
 			novo.load_replay_buffer(destino + ".replay.pkl")
-			print("[SAC] Retomado aos", novo.num_timesteps, "passos", flush=True)
+
+			print(
+				"[SAC] Retomado aos",
+				novo.num_timesteps,
+				"passos",
+				flush=True,
+			)
 			return novo
-		for ext in (".zip", ".replay.pkl", ".json"):
-			if os.path.isfile(destino + ext):
-				shutil.copyfile(destino + ext, destino + ".anterior" + ext)
+
+		_fazer_backup(destino, (".zip", ".replay.pkl", ".json"))
 		return modelo
-	if continuar:
-		if nome_modelo != "ppo_mlp":
-			raise ValueError("TREINO_CONTINUAR só funciona com o ppo_mlp")
-		carregar_estado(modelo, carregar_json(destino))
-		print("[treinador] a continuar a partir de", destino + ".json", flush=True)
-	elif nome_modelo == "ppo_mlp" and os.path.isfile(destino + ".json"):
-		shutil.copyfile(destino + ".json", destino + ".anterior.json")   # o guardado final escreve por cima
 
-	return modelo
+	if nome_modelo == "ppo_lstm":
+		if continuar:
+			from sb3_contrib import RecurrentPPO
+
+			caminho = destino + ".zip"
+
+			if not os.path.isfile(caminho):
+				raise FileNotFoundError(
+                    "Falta ficheiro para retomar PPO-LSTM: "
+					+ caminho
+				)
+
+			novo = RecurrentPPO.load(
+				caminho,
+				env=modelo.get_env(),
+				device=modelo.device,
+			)
+
+			print(
+				"[PPO-LSTM] Retomado aos",
+				novo.num_timesteps,
+				"passos",
+				flush=True,
+			)
+			return novo
+
+		_fazer_backup(destino, (".zip",))
+		return modelo
+
+	if nome_modelo == "ppo_mlp":
+		if continuar:
+			if os.path.isfile(destino + ".zip"):
+				from stable_baselines3 import PPO
+				return PPO.load(destino + ".zip", env=modelo.get_env(), device=modelo.device)
+			carregar_estado(modelo, carregar_json(destino))
+			print("[PPO] Retoma legada: apenas pesos JSON, sem otimizador/contador.", flush=True)
+		else:
+			_fazer_backup(destino, (".zip", ".json"))
+		return modelo
+
+	raise ValueError("Modelo não suportado: " + nome_modelo)
 
 
-def _criar_callback(nome_modelo, destino, cada):
-	"""Callback do SB3 que guarda o modelo de `cada` em `cada` episódios."""
+def _criar_callback(nome_modelo, destino, cada, destino_publicado=None):
+	"""Guarda o modelo a cada número definido de episódios."""
 	from stable_baselines3.common.callbacks import BaseCallback
 
 	class GuardarPorEpisodios(BaseCallback):
@@ -105,14 +246,24 @@ def _criar_callback(nome_modelo, destino, cada):
 			self.episodios = 0
 
 		def _on_step(self):
-			for _ in range(int(self.locals["dones"].sum())):   # um True por episódio acabado
+			terminados = int(self.locals["dones"].sum())
+
+			for _ in range(terminados):
 				self.episodios += 1
+
 				if self.episodios % cada == 0:
 					try:
 						guardar(self.model, nome_modelo, destino)
-						print("[treinador] episódio %d" % self.episodios, flush=True)
-					except Exception:   # um erro a guardar não deve matar o treino
+						if destino_publicado is not None:
+							publicar(destino, destino_publicado, nome_modelo)
+						print(
+							"[treinador] Episódio",
+							self.episodios,
+							flush=True,
+						)
+					except Exception:
 						traceback.print_exc()
+
 			return True
 
 	return GuardarPorEpisodios()
@@ -158,31 +309,71 @@ def _criar_callback_csv(caminho):
 
 
 def treinar(env, config, pasta):
-	"""Corre na thread de treino. `pasta` é a pasta de saída: contém pesos/ e logs/ (por omissão, ml/)."""
-	pasta = os.environ.get("TREINO_PASTA_SAIDA", pasta)
+	"""Cada chamada cria uma execução própria; retomar nunca apaga os registos anteriores."""
+	if config["passos"] <= 0 or config["guardar_cada"] < 0:
+		raise ValueError("Passos deve ser positivo e intervalo de gravação não negativo")
+	# As pistas reservadas estão fora do intervalo usado pelo treino aleatório.
+	if not 0 <= config.get("seed", 42) < 2**30:
+		raise ValueError("Seed de treino deve estar no intervalo [0, 2**30)")
+	projeto = Path(pasta)
+	base = Path(os.environ.get("TREINO_PASTA_SAIDA", str(projeto)))
 	nome = config["modelo"]
-	modelo = _criar_modelo(env, nome, pasta, config.get("seed", 42))
-	destino = os.path.join(pasta_pesos(pasta), nome)
+	execucao = nova_execucao(base / "experiencias", nome)
+	destino = str(execucao / "modelos" / nome)
+	atual = str(base / "ml" / "pesos" / nome)
+	meta = proveniencia(projeto)
+	meta.update({"configuracao": config, "estado": "a_preparar", "pasta": str(execucao)})
+	origem = {}
+	if config["continuar"]:
+		for ext in (".zip", ".json", ".replay.pkl"):
+			if Path(atual + ext).is_file():
+				origem[ext] = sha256(atual + ext)
+	meta["origem_sha256"] = origem
+	escrever_json(execucao / "configuracao.json", meta)
+	print("[treinador] Execução:", execucao, flush=True)
+	modelo = None
+	pronto = False
+	inicio = time.perf_counter()
 	try:
-		modelo = _preparar_ficheiro(modelo, nome, destino, config["continuar"])
-	except Exception:
-		modelo.get_env().close()
+		(execucao / "logs").mkdir(exist_ok=True)
+		modelo = _criar_modelo(env, nome, str(execucao), config.get("seed", 42))
+		modelo = _preparar_ficheiro(modelo, nome, atual, config["continuar"])
+		pronto = True
+		meta["estado"] = "a_treinar"
+		meta["dispositivo"] = str(modelo.device)
+		meta["passos_iniciais"] = modelo.num_timesteps
+		meta["parametros"] = {k: getattr(modelo, k, None) for k in (
+			"n_steps", "batch_size", "n_epochs", "gamma", "gae_lambda", "learning_starts",
+			"buffer_size", "gradient_steps", "tau", "ent_coef", "vf_coef")}
+		# Algumas opções SAC, como ent_coef, podem ser tensores após load().
+		meta["parametros"] = {k: v if isinstance(v, (str, int, float, bool, type(None))) else str(v)
+							  for k, v in meta["parametros"].items()}
+		meta["arquitetura"] = str(modelo.policy)
+		escrever_json(execucao / "configuracao.json", meta)
+		callback = [_criar_callback_csv(str(execucao / "logs" / "episodios.csv"))]
+		if config["guardar_cada"]:
+			callback.append(_criar_callback(nome, destino, config["guardar_cada"], atual))
+		completo = config["continuar"] and bool(origem.get(".zip"))
+		modelo.learn(total_timesteps=config["passos"], callback=callback, progress_bar=False,
+					 reset_num_timesteps=not completo)
+		meta["estado"] = "concluido"
+	except BaseException as erro:
+		meta["estado"] = "interrompido" if type(erro).__name__ in ("TreinoInterrompido", "KeyboardInterrupt") else "erro"
+		meta["erro"] = str(erro) or type(erro).__name__
 		raise
-
-	# Um CSV por modelo (logs/<modelo>.csv). Treinar de novo guarda o anterior como .anterior.csv; continuar acrescenta.
-	csv_estatisticas = os.path.join(pasta_logs(pasta), nome + ".csv")
-	if not config["continuar"] and os.path.isfile(csv_estatisticas):
-		shutil.move(csv_estatisticas, os.path.join(pasta_logs(pasta), nome + ".anterior.csv"))
-	callbacks = [_criar_callback_csv(csv_estatisticas)]
-	if config["guardar_cada"] > 0:
-		callbacks.append(_criar_callback(nome, destino, config["guardar_cada"]))
-	callback = callbacks
-	try:
-		modelo.learn(total_timesteps=config["passos"], callback=callback, progress_bar=False, reset_num_timesteps=not (config["continuar"] and nome == "sac_mlp"))
 	finally:
 		try:
-			guardar(modelo, nome, destino)
+			if pronto:
+				guardar(modelo, nome, destino)
+				publicar(destino, atual, nome)
+				meta["passos_finais"] = modelo.num_timesteps
+		except BaseException as erro_gravacao:
+			meta["estado"] = "erro_gravacao"
+			meta["erro_gravacao"] = str(erro_gravacao)
+			raise
 		finally:
-			modelo.get_env().close()
-
-
+			if modelo is not None:
+				modelo.get_env().close()
+			meta["tempo_real_segundos"] = time.perf_counter() - inicio
+			escrever_json(execucao / "configuracao.json", meta)
+	return str(execucao)

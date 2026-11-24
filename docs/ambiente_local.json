@@ -1,0 +1,14 @@
+{
+  "verificado_em": "2026-11-23",
+  "godot": "4.7.2.stable.official.ed1daf0bf",
+  "py4godot_version_no_gdextension": "4.7-alpha-21",
+  "python": "3.14.4",
+  "torch": "2.14.1+cu130",
+  "numpy": "2.5.5",
+  "stable-baselines3": "2.9.2",
+  "sb3-contrib": "2.9.2",
+  "gymnasium": "1.4.0",
+  "tensorboard": "2.21.0",
+  "packaging": "26.3",
+  "nota": "Vers\u00f5es lidas localmente. N\u00e3o garante compatibilidade com todas as GPUs nem fixa o URL latest do addon."
+}

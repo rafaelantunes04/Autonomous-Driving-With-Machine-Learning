@@ -1,6 +1,5 @@
 import pathlib, sys, tempfile, unittest, types
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / '.validation/deps'))
 sys.path.insert(0, str(ROOT))
 import numpy as np
 import gymnasium as gym
@@ -44,12 +43,12 @@ class Tests(unittest.TestCase):
             self.assertEqual(restored.num_timesteps,20)
     def test_training_manager(self):
         def factory(env, name, folder, seed):
-            pathlib.Path(folder,'pesos').mkdir(exist_ok=True)
+            pathlib.Path(folder,'modelos').mkdir(exist_ok=True)
             return SAC('MlpPolicy',env,policy_kwargs={'net_arch':[32,32]},learning_starts=4,buffer_size=100,batch_size=4,seed=seed,device='cpu')
         with tempfile.TemporaryDirectory() as folder, patch('ml.treino.treinador._criar_modelo', side_effect=factory):
             config=dict(modelo='sac_mlp',passos=16,continuar=False,guardar_cada=1,seed=9)
             treinar(Simulado(),config,folder)
-            name=str(pathlib.Path(folder)/'pesos/sac_mlp')
+            name=str(pathlib.Path(folder)/'ml/pesos/sac_mlp')
             # The production factory normally creates these directories.
             self.assertTrue(pathlib.Path(name+'.json').is_file())
             config.update(passos=4,continuar=True)

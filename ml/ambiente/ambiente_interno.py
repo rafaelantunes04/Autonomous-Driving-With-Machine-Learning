@@ -19,9 +19,10 @@ class TreinoInterrompido(Exception):
 class AmbienteInterno(gym.Env):
 	metadata = {"render_modes": []}
 
-	def __init__(self, q_cmd: "queue.Queue", q_res: "queue.Queue", parar):
+	def __init__(self, q_cmd: "queue.Queue", q_res: "queue.Queue", parar, avaliacao=False):
 		super().__init__()
 		self.q_cmd, self.q_res, self.parar = q_cmd, q_res, parar
+		self.avaliacao = avaliacao
 		# Duas ações: acelerador/travão e direção. O Godot calcula as 7 observações
 		# (velocidade, ângulo das rodas e 5 raycasts, ver scripts/rl/observacao_rl.gd).
 		self.action_space = spaces.Box(-1.0, 1.0, shape=(2,), dtype=np.float32)
@@ -44,6 +45,8 @@ class AmbienteInterno(gym.Env):
 	def reset(self, *, seed=None, options=None):
 		super().reset(seed=seed)
 		s = int(seed) if seed is not None else int(self.np_random.integers(1, 2**30))
+		if not self.avaliacao and not 0 <= s < 2**30:
+			raise ValueError("Seed reservada: não pode ser usada no treino")
 		self.seed_episodio = s
 		res = self._pedir("reset", s)
 		res["seed"] = s

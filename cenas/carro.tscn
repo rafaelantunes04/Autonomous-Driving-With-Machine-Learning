@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://oyshle6js32d"]
 
-[ext_resource type="Script" uid="uid://c4omcw1jvjhpa" path="res://scripts/carro/carro.gd" id="1_dvi8e"]
+[ext_resource type="Script" path="res://scripts/carro/carro.gd" id="1_dvi8e"]
 
 [sub_resource type="QuadMesh" id="QuadMesh_0vdwr"]
 size = Vector2(40, 20)

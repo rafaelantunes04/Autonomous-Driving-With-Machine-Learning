@@ -7,7 +7,10 @@
 
 [node name="Corrida" type="Node2D" unique_id=384909941]
 script = ExtResource("1_corrida")
+demonstrar_sac = true
+demonstrar_ppo_lstm = true
 modelo_treino = "sac_mlp"
+treino_continuar = true
 treino_guardar_cada = 10
 velocidade_treino = 10.0
 

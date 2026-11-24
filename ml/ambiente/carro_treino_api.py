@@ -31,6 +31,9 @@ class CarroTreinoAPI(CarroAPI):
 		return {
 			"obs": self.observacao,
 			"recompensa": self._ler("rl_recompensa"),
+			"batidas": int(self._ler("rl_batidas")),
+			"progresso_fracao": self._ler("rl_progresso_fracao"),
+			"tempo_simulado_s": self._ler("rl_tempo_simulado"),
 			"terminado": bool(self._ler("rl_terminado")),
 			"motivo": MOTIVOS[motivo] if 0 <= motivo < len(MOTIVOS) else "",
 		}

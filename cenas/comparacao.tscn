@@ -1,22 +1,24 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/corrida/corrida.gd" id="1_corrida"]
-[ext_resource type="Script" path="res://scripts/pista/camara_pista.gd" id="3_cam"]
-[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="5_hud"]
-[ext_resource type="Script" path="res://scripts/pista/pista.gd" id="6_pista"]
+[ext_resource type="Script" path="res://scripts/corrida/corrida.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/pista/pista.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/pista/camara_pista.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="4"]
 
-[node name="Corrida" type="Node2D" unique_id=384909941]
-script = ExtResource("1_corrida")
+[node name="Corrida" type="Node2D"]
+script = ExtResource("1")
 modo_treino = false
+modo_avaliacao = false
 demonstrar_sac = true
-velocidade_treino = 1.0
-modelo_treino = "sac_mlp"
+demonstrar_ppo_lstm = true
+colisao_entre_carros = false
+partida_sobreposta = true
 
-[node name="Pista" type="Node2D" parent="." unique_id=1872404368]
-script = ExtResource("6_pista")
+[node name="Pista" type="Node2D" parent="."]
+script = ExtResource("2")
 
-[node name="Camera2D" type="Camera2D" parent="." unique_id=1824097061]
-script = ExtResource("3_cam")
+[node name="Camera2D" type="Camera2D" parent="."]
+script = ExtResource("3")
 
-[node name="HUD" type="CanvasLayer" parent="." unique_id=1143185496]
-script = ExtResource("5_hud")
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("4")

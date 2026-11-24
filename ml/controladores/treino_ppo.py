@@ -1,24 +1,21 @@
 """Ponte Godot/treino; nome mantido por compatibilidade com as cenas."""
 import os
+import sys
+from pathlib import Path
+try:
+    _RAIZ = str(Path(__file__).resolve().parents[2])
+except NameError:
+    _RAIZ = os.getcwd()
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
 import enum
 import queue
 import threading
 import traceback
-import os
-import sys
-
-# Garante que a pasta do projeto está no sys.path para `from ml... import` funcionar.
-try:
-	_RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-except NameError:
-	_RAIZ = os.getcwd()
-if _RAIZ not in sys.path:
-	sys.path.insert(0, _RAIZ)
-
 from py4godot.classes import gdclass
 from py4godot.classes.Node import Node
 from ml.ambiente.carro_treino_api import CarroTreinoAPI
-from ml.constantes import FRAMES_POR_ACAO, pasta_ml
+from ml.constantes import FRAMES_POR_ACAO, pasta_do_projeto
 
 class Estado(enum.Enum):
 	ESPERA = 0     # à espera de um comando do SB3
@@ -55,12 +52,28 @@ class treino_ppo(Node):
 			os.environ[variavel] = str(corrida.get(propriedade))
 		os.environ["TREINO_CONTINUAR"] = "1" if corrida.get("treino_continuar") else "0"
 		config = ler_configuracao()
-		env = AmbienteInterno(self.q_cmd, self.q_res, self.parar)
+		avaliacao = bool(corrida.get("modo_avaliacao"))
+		conjunto = str(corrida.get("conjunto_avaliacao"))
+		limite_pistas = int(corrida.get("avaliacao_limite_pistas"))
+		pista = corrida.get_node("Pista")
+		contexto = {
+			"velocidade_simulacao": float(corrida.get("velocidade_treino")),
+			"pista": {k: float(pista.get(k)) for k in ("largura", "num_pontos", "raio_min", "raio_max")},
+		}
+		config["contexto_godot"] = contexto
+		env = AmbienteInterno(self.q_cmd, self.q_res, self.parar, avaliacao=avaliacao)
 
 		def correr():
 			try:
-				from ml.treino.treinador import treinar
-				treinar(env, config, pasta_ml())
+				if avaliacao:
+					from ml.avaliacao.avaliacao import avaliar, carregar_seeds
+					seeds = carregar_seeds(pasta_do_projeto(), conjunto)
+					if limite_pistas > 0:
+						seeds = seeds[:limite_pistas]
+					avaliar(env, pasta_do_projeto(), conjunto, contexto, seeds=seeds)
+				else:
+					from ml.treino.treinador import treinar
+					treinar(env, config, pasta_do_projeto())
 			except TreinoInterrompido:
 				print("[treino_ppo] interrompido", flush=True)
 			except Exception:
@@ -68,7 +81,7 @@ class treino_ppo(Node):
 			finally:
 				self.fim.set()
 
-		print("[treino_ppo] a treinar %s durante %d passos..." % (config["modelo"], config["passos"]), flush=True)
+		print("[ponte] Avaliação: " + conjunto if avaliacao else "[ponte] Treino %s: %d passos" % (config["modelo"], config["passos"]), flush=True)
 		self.thread = threading.Thread(target=correr, daemon=True)
 		self.thread.start()
 
