@@ -60,7 +60,7 @@ func reiniciar() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if _carro == null or _linha.is_empty():
+	if _carro == null or _linha.is_empty() or not _carro.is_physics_processing():
 		return
 	if not a_correr:
 		if _carro.velocity.length() <= 1.0:

@@ -1,7 +1,7 @@
 """Controlador Python que conduz o carro com o modelo PPO treinado (via py4godot).
 
 Sem torch nem stable-baselines3: os pesos vêm de
-modelos/ppo_mlp.json (escrito pelo treino, cenas/treino.tscn) e a rede
+ml/pesos/ppo_mlp.json (escrito pelo treino, godot --headless --path . -- --treino) e a rede
 (MLP 7 -> 64 -> 64 -> 2, tanh) é calculada aqui em Python puro.
 
 As 7 observações (velocidade, ângulo das rodas e 5 raycasts) são calculadas no Godot (scripts/rl/observacao_rl.gd) e lidas
@@ -15,19 +15,27 @@ IMPORTANTE: o nome da classe tem de ser igual ao nome do ficheiro
 import json
 import math
 import os
+import sys
+from pathlib import Path
+try:
+    _RAIZ = str(Path(__file__).resolve().parents[2])
+except NameError:
+    _RAIZ = os.getcwd()
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
 
 from py4godot.classes import gdclass
 from py4godot.classes.Node import Node
 
-from carro_api import CarroAPI
-from constantes import FICHEIRO_PESOS, FRAMES_POR_ACAO, OBSERVACOES, pasta_do_projeto
+from ml.ambiente.carro_api import CarroAPI
+from ml.constantes import FICHEIRO_PESOS, FRAMES_POR_ACAO, OBSERVACOES, pasta_ml
 
 INTERVALO_PRINT = 1.0
 
 
 def _procurar_pesos():
 	"""Caminho do JSON de pesos, ou None se ainda não houver treino."""
-	caminho = os.path.join(pasta_do_projeto(), FICHEIRO_PESOS)
+	caminho = os.path.join(pasta_ml(), FICHEIRO_PESOS)
 	return caminho if os.path.isfile(caminho) else None
 
 
@@ -36,14 +44,7 @@ def _carregar_rede(caminho):
 		return json.load(f)["camadas"]
 
 
-def _prever(camadas, obs):
-	"""Passagem direta da rede: devolve [acelerar, virar] em [-1, 1] (política determinística)."""
-	x = obs
-	for camada in camadas:
-		x = [sum(w * v for w, v in zip(linha, x)) + b for linha, b in zip(camada["w"], camada["b"])]
-		if camada["ativacao"] == "tanh":
-			x = [math.tanh(v) for v in x]
-	return [max(-1.0, min(1.0, v)) for v in x]
+from ml.modelos.ppo_modelo import prever as _prever
 
 
 @gdclass
@@ -61,7 +62,7 @@ class corrida_ppo(Node):
 
 		caminho = _procurar_pesos()
 		if caminho is None:
-			print("[corrida_ppo] não encontrei %s. Treina primeiro (cenas/treino.tscn)" % FICHEIRO_PESOS)
+			print("[corrida_ppo] não encontrei %s. Treina primeiro (godot --headless --path . -- --treino)" % FICHEIRO_PESOS)
 			return
 		rede = _carregar_rede(caminho)
 		entradas = len(rede[0]["w"][0])

@@ -1,14 +1,4 @@
-"""Guardar e carregar os pesos do PPO-MLP em JSON (e os outros modelos em .zip do SB3).
-
-O JSON tem o ator ("camadas", é o que o corrida_ppo.py lê), o crítico e o log_std,
-para o treino poder continuar mais tarde.
-"""
-
-import json
-import os
-
-import torch
-
+"""Pesos PPO: exportação e reposição; não inclui o estado do otimizador."""
 
 def _camadas(sequencia, final):
 	"""Lista de camadas [{w, b, ativacao}] de uma Sequential (Linear/Tanh) mais a camada final linear."""
@@ -43,6 +33,7 @@ def estado_ppo_mlp(modelo):
 
 
 def _preencher(modulos, camadas, nome):
+	import torch
 	"""Copia os pesos de `camadas` para a lista de módulos Linear."""
 	if len(modulos) != len(camadas):
 		raise ValueError("%s: o ficheiro tem %d camadas e o modelo %d" % (nome, len(camadas), len(modulos)))
@@ -56,6 +47,7 @@ def _preencher(modulos, camadas, nome):
 
 
 def carregar_estado(modelo, dados):
+	import torch
 	"""Põe os pesos guardados num PPO-MLP novo (o inverso de estado_ppo_mlp)."""
 	pol = modelo.policy
 	linear = lambda seq: [m for m in seq if type(m).__name__ == "Linear"]
@@ -69,23 +61,24 @@ def carregar_estado(modelo, dados):
 			pol.log_std.copy_(torch.tensor(dados["log_std"], dtype=pol.log_std.dtype))
 
 
-def guardar(modelo, nome_modelo, destino):
-	"""Escreve o modelo no disco (o ppo_mlp em JSON, os outros em .zip do SB3)."""
-	if nome_modelo == "ppo_mlp":
-		tmp = destino + ".json.tmp"
-		with open(tmp, "w", encoding="utf-8") as f:
-			json.dump(estado_ppo_mlp(modelo), f)
-		os.replace(tmp, destino + ".json")   # troca atómica: nunca fica um JSON a meio
-		print("[treino_ppo] pesos guardados:", destino + ".json", flush=True)
-	else:
-		modelo.save(destino)
-		print("[treino_ppo] modelo guardado:", destino + ".zip", flush=True)
+
+def pesos_ppo_mlp(modelo):
+	"""Exporta apenas o ator PPO."""
+	return _camadas(modelo.policy.mlp_extractor.policy_net, modelo.policy.action_net)
 
 
-def carregar_json(destino):
-	"""Lê o JSON de pesos de `destino` (sem extensão)."""
-	caminho = destino + ".json"
-	if not os.path.isfile(caminho):
-		raise FileNotFoundError("Não há %s para continuar" % caminho)
-	with open(caminho, encoding="utf-8") as f:
-		return json.load(f)
+def prever(camadas, observacao):
+    """Ator determinístico PPO-MLP, com clipping igual ao predict() do SB3."""
+    import math
+    x = list(observacao)
+    if not all(math.isfinite(v) for v in x):
+        raise ValueError("Observação PPO inválida")
+    for camada in camadas:
+        if len(camada["w"]) != len(camada["b"]) or any(len(w) != len(x) for w in camada["w"]):
+            raise ValueError("Dimensões PPO incompatíveis")
+        x = [sum(w * v for w, v in zip(linha, x)) + b for linha, b in zip(camada["w"], camada["b"])]
+        if camada["ativacao"] == "tanh":
+            x = [math.tanh(v) for v in x]
+        elif camada["ativacao"] != "linear":
+            raise ValueError("Ativação PPO não suportada")
+    return [max(-1.0, min(1.0, v)) for v in x]

@@ -104,6 +104,11 @@ func _physics_process(delta: float) -> void:
 	if not _cronometro_ativo or _carros.is_empty():
 		return
 
+	var corrida := get_parent() as Corrida
+	if corrida != null and (corrida.modo_treino or corrida.modo_avaliacao):
+		_tempo_decorrido = float(_carros[0].get("rl_tempo_simulado"))
+		_cronometro.text = EstatisticasCorrida.formatar_tempo(_tempo_decorrido)
+		return
 	_tempo_decorrido += delta
 	_cronometro.text = EstatisticasCorrida.formatar_tempo(_tempo_decorrido)
 

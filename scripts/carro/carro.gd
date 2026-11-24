@@ -109,6 +109,7 @@ var estado_rumo: float:             ## graus, 0 a 360 (0 = +X)
 var _observacao_rl: ObservacaoRL
 var _obs_cache := PackedFloat32Array()
 var _obs_tick: int = -1
+var episodio_id: int = 0
 
 
 ## Cria à primeira chamada o ObservacaoRL (precisa da Pista, irmã deste nó).
@@ -185,6 +186,13 @@ var rl_recompensa: float:
 	get: return _treino_rl.recompensa if _treino_rl != null else 0.0
 var rl_terminado: bool:
 	get: return _treino_rl.terminado if _treino_rl != null else false
+var rl_batidas: int:
+	get: return _treino_rl.batidas if _treino_rl != null else 0
+var rl_progresso_fracao: float:
+	get:
+		return _treino_rl.progresso_fracao() if _treino_rl != null else 0.0
+var rl_tempo_simulado: float:
+	get: return _treino_rl.passos * TreinoRL.FRAMES_POR_ACAO / 60.0 if _treino_rl != null else 0.0
 var rl_motivo: int:                    ## ver TreinoRL.Motivo: 0 nenhum, 1 batida, 2 volta, 3 tempo
 	get: return _treino_rl.motivo if _treino_rl != null else 0
 
@@ -260,6 +268,8 @@ func permitir_colisao_entre_carros(ativo: bool) -> void:
 
 ## Coloca o carro parado numa posição/rotação global, sem herdar estado anterior.
 func reiniciar(nova_posicao: Vector2, nova_rotacao: float) -> void:
+	episodio_id += 1
+	invalidar_observacao()
 	global_position = nova_posicao
 	global_rotation = nova_rotacao
 	velocity = Vector2.ZERO

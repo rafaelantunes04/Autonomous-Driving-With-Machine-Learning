@@ -1,0 +1,22 @@
+[gd_scene format=3 uid="uid://dw5oik0arr872"]
+
+[ext_resource type="Script" uid="uid://crd50cn1x7b5o" path="res://scripts/corrida/corrida.gd" id="1"]
+[ext_resource type="Script" uid="uid://c5r7wc3pra5ad" path="res://scripts/pista/pista.gd" id="2"]
+[ext_resource type="Script" uid="uid://bd8kujompt410" path="res://scripts/pista/camara_pista.gd" id="3"]
+[ext_resource type="Script" uid="uid://bogiamjc0mmks" path="res://scripts/ui/hud.gd" id="4"]
+
+[node name="Corrida" type="Node2D" unique_id=1835510182]
+script = ExtResource("1")
+modo_treino = true
+treino_continuar = true
+treino_guardar_cada = 10
+velocidade_treino = 10.0
+
+[node name="Pista" type="Node2D" parent="." unique_id=352468234]
+script = ExtResource("2")
+
+[node name="Camera2D" type="Camera2D" parent="." unique_id=132008051]
+script = ExtResource("3")
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1828931106]
+script = ExtResource("4")

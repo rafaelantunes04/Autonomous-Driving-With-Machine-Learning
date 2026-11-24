@@ -1,7 +1,15 @@
 .godot/
 __pycache__/
 *.uid
+!scripts/**/*.gd.uid
 addons/
 *.tmp
 .venv/
-logs/
+.validation/
+experiencias/
+resultados/
+ml/logs/*
+!ml/logs/.gitkeep
+ml/pesos/*.anterior.*
+ml/pesos/*.replay.pkl
+/logs/

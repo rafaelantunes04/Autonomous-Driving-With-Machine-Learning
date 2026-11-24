@@ -109,7 +109,7 @@ def python_do_addon(dest: Path) -> Path | None:
     return None
 
 
-def instalar_dependencias(dest: Path, inicio: int = 1, total: int = 2) -> int:
+def instalar_dependencias(dest: Path, inicio: int = 1, total: int = 2, torch_index=None) -> int:
     """Instala o requirements.txt no Python do py4godot (e o pip, se faltar). 0 = sucesso."""
     requisitos = dest / "requirements.txt"
     if not requisitos.is_file():
@@ -124,22 +124,28 @@ def instalar_dependencias(dest: Path, inicio: int = 1, total: int = 2) -> int:
         return 1
     print(f"Python do py4godot: {exe}")
 
-    if subprocess.run([str(exe), "-m", "pip", "--version"],
+    if subprocess.run([str(exe), "-s", "-m", "pip", "--version"],
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
         get_pip = dest / "addons" / "py4godot" / "get_pip.py"
         if not get_pip.is_file():
             print(f"O pip não está instalado e falta {get_pip}.")
             return 1
         print("O pip não está instalado: a instalar (get_pip.py)...")
-        if subprocess.run([str(exe), str(get_pip)]).returncode != 0:
+        if subprocess.run([str(exe), "-s", str(get_pip)]).returncode != 0:
             print("Falhou a instalação do pip.")
             return 1
     else:
         print("O pip já está instalado.")
 
+    if torch_index:
+        versao = "torch==2.14.1+cu130" if torch_index == "cu130" else "torch==2.14.1"
+        indice = "https://download.pytorch.org/whl/" + torch_index
+        if subprocess.run([str(exe), "-s", "-m", "pip", "install", versao, "--index-url", indice]).returncode:
+            return 1
+
     passo(inicio + 1, total, "A instalar as dependências do requirements.txt "
           "(pode demorar vários minutos: inclui o torch)")
-    if subprocess.run([str(exe), "-m", "pip", "install", "-r", str(requisitos)]).returncode != 0:
+    if subprocess.run([str(exe), "-s", "-m", "pip", "install", "-r", str(requisitos)]).returncode != 0:
         print("Falhou a instalação das dependências. Para tentar outra vez: python download_addon.py")
         return 1
     print("Dependências instaladas.")
@@ -156,6 +162,7 @@ def main() -> int:
                         help="não instalar o requirements.txt no Python do py4godot")
     parser.add_argument("--force", action="store_true",
                         help="descarregar e substituir mesmo que addons/py4godot/ já exista")
+    parser.add_argument("--torch-index", choices=("cpu", "cu130"), help="distribuição PyTorch; omitir preserva a instalada se compatível")
     args = parser.parse_args()
 
     dest = Path(args.dest)
@@ -164,7 +171,7 @@ def main() -> int:
     existing = dest / "addons" / "py4godot"
     if existing.exists() and not args.force:
         print(f"{existing} já existe (usa --force para o substituir).")
-        return 0 if args.sem_deps else instalar_dependencias(dest)
+        return 0 if args.sem_deps else instalar_dependencias(dest, torch_index=args.torch_index)
 
     total = 2 if args.sem_deps else 4   # descarregar, extrair [, pip, dependências]
     with tempfile.TemporaryDirectory() as tmp:
@@ -183,7 +190,7 @@ def main() -> int:
         print(f"Nada encontrado em '{PREFIX}' dentro do zip.")
         return 1
     print(f"{n} ficheiros extraídos para {dest / 'addons'}")
-    return 0 if args.sem_deps else instalar_dependencias(dest, 3, total)
+    return 0 if args.sem_deps else instalar_dependencias(dest, 3, total, torch_index=args.torch_index)
 
 
 if __name__ == "__main__":

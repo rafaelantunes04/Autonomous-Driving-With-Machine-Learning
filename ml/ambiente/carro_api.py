@@ -22,7 +22,7 @@ O que é só para o treino está em carro_treino_api.py.
 
 import traceback
 
-from constantes import OBSERVACOES
+from ml.constantes import OBSERVACOES
 
 # Nome do sensor -> propriedade do carro (scripts/carro/carro.gd)
 SENSORES = {
